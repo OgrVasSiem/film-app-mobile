@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.app_mobile.core.designsystem"
+    namespace = "com.example.film_app_mobile.core.designsystem"
     compileSdk {
         version = release(libs.versions.compileSdk.get().toInt())
     }

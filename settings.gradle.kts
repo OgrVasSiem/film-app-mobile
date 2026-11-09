@@ -24,5 +24,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "app-mobile"
+rootProject.name = "film-app-mobile"
 include(":app", ":core:designsystem", ":core:network", ":core:storage")

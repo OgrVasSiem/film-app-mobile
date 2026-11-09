@@ -1,0 +1,27 @@
+package com.example.film_app_mobile.core.designsystem.component
+
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.film_app_mobile.core.designsystem.theme.AppTheme
+
+@Composable
+fun AppText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = AppTheme.typography.body,
+    color: Color = AppTheme.colors.textPrimary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+) {
+    BasicText(
+        text = text,
+        modifier = modifier,
+        style = style.copy(color = color),
+        maxLines = maxLines,
+        overflow = overflow,
+    )
+}

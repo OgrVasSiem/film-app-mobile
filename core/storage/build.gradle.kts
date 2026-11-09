@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.app_mobile.core.storage"
+    namespace = "com.example.film_app_mobile.core.storage"
     compileSdk {
         version = release(libs.versions.compileSdk.get().toInt())
     }

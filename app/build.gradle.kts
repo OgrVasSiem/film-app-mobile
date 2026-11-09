@@ -16,7 +16,7 @@ val releaseApiUrl = providers.gradleProperty("API_BASE_URL_RELEASE")
     .orElse("")
 
 android {
-    namespace = "com.example.app_mobile"
+    namespace = "com.example.film_app_mobile"
     compileSdk {
         version = release(libs.versions.compileSdk.get().toInt())
     }

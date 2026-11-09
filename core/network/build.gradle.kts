@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.app_mobile.core.network"
+    namespace = "com.example.film_app_mobile.core.network"
     compileSdk {
         version = release(libs.versions.compileSdk.get().toInt())
     }

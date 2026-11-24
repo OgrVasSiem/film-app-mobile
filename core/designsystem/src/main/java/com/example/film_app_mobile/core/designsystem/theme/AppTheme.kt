@@ -1,6 +1,5 @@
 package com.example.film_app_mobile.core.designsystem.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -22,7 +21,7 @@ object AppTheme {
 
 @Composable
 fun AppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     typography: AppTypography = DefaultTypography,
     content: @Composable () -> Unit,
 ) {

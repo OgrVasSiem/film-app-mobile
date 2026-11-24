@@ -1,7 +1,11 @@
 <resources>
-    <style name="Theme.Clicker" parent="android:style/Theme.NoTitleBar">
+    <style name="Theme.Clicker" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">#111217</item>
+        <item name="android:windowBackground">#191617</item>
     </style>
 </resources>

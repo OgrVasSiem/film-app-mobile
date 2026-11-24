@@ -58,7 +58,7 @@ class ApiExecutorTest {
     @Test
     fun releaseRejectsCleartext() {
         assertThrows(IllegalArgumentException::class.java) {
-            NetworkStack(NetworkConfig("http://localhost:8080/"))
+            NetworkStack(NetworkConfig("http://localhost:8081/"))
         }
     }
 

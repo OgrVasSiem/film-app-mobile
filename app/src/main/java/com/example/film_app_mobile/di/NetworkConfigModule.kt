@@ -13,9 +13,10 @@ import javax.inject.Singleton
 object NetworkConfigModule {
     @Provides
     @Singleton
-    fun provideNetworkConfig(): NetworkConfig = NetworkConfig(
-        baseUrl = BuildConfig.API_BASE_URL,
-        allowCleartext = BuildConfig.DEBUG,
-        enableHttpLogging = false,
-    )
+    fun provideNetworkConfig(): NetworkConfig =
+        NetworkConfig(
+            baseUrl = BuildConfig.API_BASE_URL,
+            allowCleartext = BuildConfig.DEBUG,
+            enableHttpLogging = false,
+        )
 }

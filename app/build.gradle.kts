@@ -11,7 +11,7 @@ fun String.asBuildConfigString(): String =
         .replace("\n", "\\n").replace("\r", "\\r") + "\""
 
 val debugApiUrl = providers.gradleProperty("API_BASE_URL_DEBUG")
-    .orElse("http://10.0.2.2:8080/")
+    .orElse("http://10.0.2.2:8081/api/v1/")
 val releaseApiUrl = providers.gradleProperty("API_BASE_URL_RELEASE")
     .orElse("")
 
@@ -21,7 +21,7 @@ android {
         version = release(libs.versions.compileSdk.get().toInt())
     }
     defaultConfig {
-        applicationId = "com.example.app_mobile"
+        applicationId = "com.example.film_app_mobile"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
@@ -63,7 +63,9 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.androidx.work.runtime)
     implementation(project(":core:designsystem"))
+    implementation(libs.retrofit.core)
     implementation(project(":core:network"))
     implementation(project(":core:storage"))
 
@@ -96,6 +98,7 @@ dependencies {
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.room.runtime)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

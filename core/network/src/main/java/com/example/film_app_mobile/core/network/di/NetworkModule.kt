@@ -2,9 +2,7 @@ package com.example.film_app_mobile.core.network.di
 
 import com.example.film_app_mobile.core.network.NetworkConfig
 import com.example.film_app_mobile.core.network.NetworkStack
-import com.example.film_app_mobile.core.network.api.HealthApi
-import com.example.film_app_mobile.core.network.repository.DefaultHealthRepository
-import com.example.film_app_mobile.core.network.repository.HealthRepository
+import com.example.film_app_mobile.core.network.api.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -16,13 +14,23 @@ import javax.inject.Singleton
 internal object NetworkModule {
     @Provides
     @Singleton
-    fun provideNetworkStack(config: NetworkConfig): NetworkStack = NetworkStack(config)
+    fun provideAuthApi(stack: NetworkStack): AuthApi = stack.retrofit.create(AuthApi::class.java)
 
     @Provides
     @Singleton
-    fun provideHealthRepository(stack: NetworkStack): HealthRepository =
-        DefaultHealthRepository(
-            api = stack.retrofit.create(HealthApi::class.java),
-            executor = stack.executor,
-        )
+    fun provideProfileApi(stack: NetworkStack): ProfileApi =
+        stack.retrofit.create(ProfileApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePacksApi(stack: NetworkStack): PacksApi = stack.retrofit.create(PacksApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideLibraryApi(stack: NetworkStack): LibraryApi =
+        stack.retrofit.create(LibraryApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideNetworkStack(config: NetworkConfig): NetworkStack = NetworkStack(config)
 }

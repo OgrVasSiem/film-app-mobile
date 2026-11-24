@@ -10,7 +10,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
 
-internal class NetworkStack(config: NetworkConfig) {
+class NetworkStack(config: NetworkConfig) {
     private val baseUrl = config.baseUrl.trim().let { value ->
         require(value.isNotEmpty()) { "Set API_BASE_URL_RELEASE or API_BASE_URL_DEBUG in Gradle properties." }
         val url = value.toHttpUrl()
@@ -54,5 +54,5 @@ internal class NetworkStack(config: NetworkConfig) {
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
 
-    val executor = ApiExecutor(json)
+    internal val executor = ApiExecutor(json)
 }

@@ -15,8 +15,8 @@ import javax.inject.Singleton
 object StorageModule {
     @Provides
     @Singleton
-    fun database(@ApplicationContext context: Context): FilmDatabase =
-        Room.databaseBuilder(context, FilmDatabase::class.java, "films.db").build()
+    fun database(@ApplicationContext context: Context, @javax.inject.Named("serverNamespace") namespace: String): FilmDatabase =
+        Room.databaseBuilder(context, FilmDatabase::class.java, "films" + namespace + ".db").build()
 
     @Provides fun provideProfileDao(database: FilmDatabase) = database.profile()
 

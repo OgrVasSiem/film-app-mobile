@@ -9,6 +9,6 @@ data class Pack(
     val description: String,
     val premium: Boolean,
     val locked: Boolean,
-    val coverUrl: String? = null,
+    val coverHash: String? = null,
     val isCompleted: Boolean = false,
 )

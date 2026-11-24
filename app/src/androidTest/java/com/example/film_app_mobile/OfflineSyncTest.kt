@@ -36,23 +36,23 @@ class OfflineSyncTest {
             val sync = DecisionSync(session, server, db.library()) {}
             val auth = AuthRepository(session, server, sync)
             val profile = ProfileRepository(session, server, db.profile())
-            val packs = PacksRepository(session, server, db.pack(), db.deck(), sync)
+            val packs = PacksRepository(session, server, db.pack(), db.deck(), sync, com.example.film_app_mobile.data.image.CoverFiles(context))
             val library = LibraryRepository(session, server, db.library(), sync)
         }
         try {
             var repository = Repositories()
             repository.auth.signIn("first", "pass", false)
             repository.packs.packs()
-            val film = repository.packs.films(1).single()
+            val film = repository.packs.page(1).cards.single()
             server.online = false
             repository.library.decide(film, "WILL_WATCH")
             repository.library.decide(film, "WATCHED")
-            assertTrue(repository.packs.films(1).isEmpty())
+            assertTrue(repository.packs.localDeck(1)!!.cards.isEmpty())
             db.close()
             db = open()
             repository = Repositories()
             assertEquals("first", repository.profile.profile().login)
-            assertEquals(1, repository.packs.packs().size)
+            assertEquals(1, repository.packs.cachedPacks().size)
             assertEquals(film, repository.library.library("WATCHED").single())
             assertNull(server.status)
             server.online = true
@@ -62,7 +62,7 @@ class OfflineSyncTest {
             assertEquals(1, server.writes)
             server.online = false
             repository.library.reset(film.id)
-            assertEquals(film, repository.packs.films(1).single())
+            assertEquals(film, repository.packs.localDeck(1)!!.cards.single())
             server.online = true
             repository.sync.sync()
             assertNull(server.status)
@@ -104,12 +104,15 @@ class OfflineSyncTest {
             return account
         }
 
-        override suspend fun packs(auth: String): List<PackDto> {
+        override suspend fun catalog(auth: String, etag: String?) = retrofit2.Response.success(CatalogDto(packs(auth), emptyMap()))
+        override suspend fun page(auth: String, id: Long, limit: Int, cursor: String?) = FilmPageDto(films(auth,id),null)
+
+        private suspend fun packs(auth: String): List<PackDto> {
             connected()
             return listOf(PackDto(1, "Pack", "", false, false))
         }
 
-        override suspend fun films(auth: String, id: Long): List<FilmDto> {
+        private suspend fun films(auth: String, id: Long): List<FilmDto> {
             connected()
             return if (status == null) listOf(film) else emptyList()
         }

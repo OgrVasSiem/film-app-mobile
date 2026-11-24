@@ -57,7 +57,7 @@ internal fun PacksScreen(
         ) {
             Box {
                 PackCover(
-                    pack.coverUrl,
+                    pack.coverHash,
                     Modifier.fillMaxWidth().aspectRatio(1.85f),
                     blurred = pack.isCompleted,
                 )
@@ -102,7 +102,12 @@ internal fun PacksScreen(
 
 @Composable
 internal fun PacksRoute(vm: PacksViewModel, open: (Pack) -> Unit) {
+    androidx.lifecycle.compose.LifecycleResumeEffect(vm) {
+        vm.refresh()
+        onPauseOrDispose {}
+    }
     ScreenContent(vm.request.status, stringResource(R.string.packs_title)) {
-        PacksScreen(vm.state, vm.request.status.busy, vm::query, open)
+        Link(stringResource(R.string.refresh_catalog), !vm.request.status.busy) { vm.refresh(true) }
+        PacksScreen(vm.state, vm.request.status.busy && vm.state.packs.isEmpty(), vm::query, open)
     }
 }

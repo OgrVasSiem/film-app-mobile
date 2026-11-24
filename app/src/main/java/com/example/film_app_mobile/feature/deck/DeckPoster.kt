@@ -24,12 +24,13 @@ import kotlinx.coroutines.*
 
 @Composable
 internal fun DeckPoster(movie: Film, defocus: Float = 0f) {
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val bitmap by
             produceState<android.graphics.Bitmap?>(null, movie.posterUrl) {
                 movie.posterUrl
                     ?.takeIf { it.startsWith("https://") }
-                    ?.let { value = loadPoster(it) }
+                    ?.let { value = loadPoster(context, it) }
             }
         val image = remember(bitmap) { bitmap?.asImageBitmap() }
         val backdrop = remember(bitmap) { bitmap?.blurSource()?.asImageBitmap() }

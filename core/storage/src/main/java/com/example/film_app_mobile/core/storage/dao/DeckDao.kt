@@ -23,15 +23,28 @@ abstract class DeckDao : FilmCache() {
     )
     abstract suspend fun deck(owner: Long, pack: Long): List<FilmEntity>
 
+    @Query("SELECT * FROM deck_pages WHERE owner=:owner AND pack=:pack")
+    abstract suspend fun page(owner: Long, pack: Long): DeckPage?
+
+    @Upsert protected abstract suspend fun savePage(page: DeckPage)
+
+    @Query("DELETE FROM pack_films WHERE owner=:owner AND pack=:pack")
+    protected abstract suspend fun clearLinks(owner: Long, pack: Long)
+
+    @Query("SELECT film FROM pack_films WHERE owner=:owner AND pack=:pack ORDER BY position")
+    protected abstract suspend fun ids(owner: Long, pack: Long): List<Long>
+
     @Transaction
-    open suspend fun replaceDeck(owner: Long, pack: Long, rows: List<FilmEntity>) {
-        clearDeck(owner, pack)
+    open suspend fun storePage(page: DeckPage, first: Boolean, rows: List<FilmEntity>) {
+        val (owner, pack) = page
+        if (first) clearLinks(owner, pack)
+        val existing = ids(owner, pack).toHashSet()
+        val offset = existing.size
+        val newRows = rows.filter { existing.add(it.id) }
         putFilms(rows)
-        putLinks(rows.mapIndexed { index, film -> PackFilm(owner, pack, film.id, index) })
-        // The endpoint returns only undecided films. Remove stale synced decisions changed on
-        // another device.
+        putLinks(newRows.mapIndexed { i, f -> PackFilm(owner, pack, f.id, offset + i) })
         rows.forEach { forgetSyncedDecision(owner, it.id) }
-        mark(Snapshot(owner, "deck/" + pack))
+        savePage(page)
     }
 
     @Query("DELETE FROM decisions WHERE owner=:owner AND film=:id AND NOT pending")

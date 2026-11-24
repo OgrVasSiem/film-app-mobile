@@ -21,10 +21,10 @@ class StringLists {
             FilmEntity::class,
             PackFilm::class,
             DecisionEntity::class,
-            Snapshot::class,
+            Snapshot::class, CatalogStamp::class, DeckPage::class,
         ],
-    version = 2,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    version = 3,
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 @TypeConverters(StringLists::class)
 abstract class FilmDatabase : RoomDatabase() {

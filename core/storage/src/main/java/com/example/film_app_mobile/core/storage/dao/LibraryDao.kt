@@ -37,13 +37,17 @@ abstract class LibraryDao : FilmCache() {
         mark(Snapshot(owner, "library/" + status))
     }
 
-    @Query("DELETE FROM snapshots WHERE owner=:owner AND (scope='packs' OR scope LIKE 'deck/%')")
+    @Query("DELETE FROM snapshots WHERE owner=:owner AND scope='packs'")
     protected abstract suspend fun invalidate(owner: Long)
+
+    @Query("DELETE FROM deck_pages WHERE owner=:owner")
+    protected abstract suspend fun resetPages(owner: Long)
 
     @Transaction
     open suspend fun commitDecision(decision: DecisionEntity) {
         if (decision.status == null) forget(decision.owner, decision.film)
         else putDecision(decision.copy(pending = false))
+        if (decision.status == null) resetPages(decision.owner)
         invalidate(decision.owner)
     }
 }

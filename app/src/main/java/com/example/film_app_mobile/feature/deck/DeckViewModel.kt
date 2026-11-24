@@ -32,13 +32,45 @@ constructor(
         load()
     }
 
-    fun load() =
-        request.run {
-            val cards = packsRepository.films(pack.id)
-            val remaining =
-                if (cards.isEmpty()) packsRepository.films(pack.id, allowCache = false) else cards
-            state = state.copy(cards = remaining, total = remaining.size, loaded = true)
+    private fun display(deck: com.example.film_app_mobile.data.repository.LocalDeck, preserveOrder: Boolean) {
+        val byId = deck.cards.associateBy { it.id }
+        val cards = if (preserveOrder) (state.cards.mapNotNull { byId[it.id] } + deck.cards).distinctBy { it.id } else deck.cards
+        val seen = if (preserveOrder) state.total - state.cards.size else 0
+        state = state.copy(cards = cards, total = seen + cards.size, nextCursor = deck.next, loaded = true)
+    }
+
+    fun load() = request.run {
+        val cached = packsRepository.localDeck(pack.id)
+        display(cached ?: packsRepository.page(pack.id), false)
+        fill()
+    }
+
+    private var restarting = false
+
+    fun restart() = request.run {
+        restarting = true
+        display(packsRepository.page(pack.id, restart = true), false)
+        restarting = false
+        fill()
+    }
+
+    fun retry() = request.run {
+        if (restarting || !state.loaded) {
+            display(packsRepository.page(pack.id, restart = restarting), false)
+            restarting = false
         }
+        fill()
+    }
+
+    private suspend fun fill() {
+        while (state.cards.size <= 3) {
+            val cursor = state.nextCursor ?: break
+            try { display(packsRepository.page(pack.id, cursor), true) } catch (e: com.example.film_app_mobile.data.error.RequestFailure) {
+                if (e.messageId == com.example.film_app_mobile.R.string.premium_required) state = DeckState()
+                throw e
+            }
+        }
+    }
 
     fun choose(movie: Film, folder: String, onRejected: () -> Unit) =
         request.run {
@@ -57,18 +89,10 @@ constructor(
             state =
                 state.copy(
                     cards = nextCards,
-                    loaded = state.cards.size > 1,
+                    loaded = true,
                     saved = state.saved + if (folder == "WILL_WATCH") 1 else 0,
                     skipped = state.skipped + if (folder == "WONT_WATCH") 1 else 0,
                 )
-            if (state.cards.isEmpty()) {
-                val remaining = packsRepository.films(pack.id, allowCache = false)
-                state =
-                    state.copy(
-                        cards = remaining,
-                        loaded = true,
-                        total = maxOf(state.total, remaining.size),
-                    )
-            }
+            fill()
         }
 }

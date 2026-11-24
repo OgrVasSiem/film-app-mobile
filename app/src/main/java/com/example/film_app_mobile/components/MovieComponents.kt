@@ -80,10 +80,11 @@ internal fun Chip(
 
 @Composable
 internal fun Poster(url: String?) {
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
     if (url == null || !url.startsWith("https://")) return
     val bitmap by
         produceState<android.graphics.Bitmap?>(null, url) {
-            value = com.example.film_app_mobile.data.image.loadPoster(url)
+            value = com.example.film_app_mobile.data.image.loadPoster(context, url)
         }
     bitmap?.let {
         Image(

@@ -73,11 +73,11 @@ internal fun DeckRoute(pack: Pack, library: () -> Unit, packs: () -> Unit) {
         }
         if (request.busy && state.cards.isEmpty()) AppText(stringResource(R.string.loading))
         request.error?.let { AppText(stringResource(it)) }
-        if (state.loaded && state.cards.isEmpty()) {
+        Link(stringResource(R.string.refresh_deck), !request.busy, vm::restart)
+        if (request.error != null) Action(stringResource(R.string.retry), action = vm::retry)
+        if (state.loaded && state.nextCursor == null && state.cards.isEmpty()) {
             CompletionScreen(CompletionState(state.saved, state.skipped), library, packs)
         } else {
-            if (!state.loaded && request.error != null)
-                Action(stringResource(R.string.retry), action = vm::load)
             DeckScreen(state, request.busy, vm::choose)
         }
     }

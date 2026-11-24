@@ -20,30 +20,19 @@ import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.data.image.loadPoster
 import java.net.URI
 
-internal fun resolveCover(base: String, path: String?): String? {
-    if (path.isNullOrBlank()) return null
-    return runCatching {
-            val origin = URI(base).resolve("/")
-            val url = origin.resolve(path)
-            require(url.scheme == origin.scheme && url.rawAuthority == origin.rawAuthority)
-            url.toASCIIString()
-        }
-        .getOrNull()
-}
-
 @Composable
 internal fun PackCover(path: String?, modifier: Modifier, blurred: Boolean = false) {
-    val url = remember(path) { resolveCover(BuildConfig.API_BASE_URL, path) }
+    val directory = androidx.compose.ui.platform.LocalContext.current.filesDir
     Box(
         modifier.clip(RoundedCornerShape(14.dp)).background(AppTheme.colors.border),
         contentAlignment = Alignment.Center,
     ) {
-        key(url) {
+        key(path) {
             var failed by remember { mutableStateOf(false) }
             val image by
-                produceState<android.graphics.Bitmap?>(null, url) {
-                    if (url != null) {
-                        value = loadPoster(url)
+                produceState<android.graphics.Bitmap?>(null, path) {
+                    if (path != null) {
+                        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { android.graphics.BitmapFactory.decodeFile(java.io.File(directory, "covers/" + path).path) }
                         failed = value == null
                     }
                 }
@@ -58,7 +47,7 @@ internal fun PackCover(path: String?, modifier: Modifier, blurred: Boolean = fal
             else
                 AppText(
                     stringResource(
-                        if (url == null || failed) R.string.cover_missing
+                        if (path == null || failed) R.string.cover_missing
                         else R.string.cover_loading
                     ),
                     style = AppTheme.typography.caption,

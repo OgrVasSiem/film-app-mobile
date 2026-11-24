@@ -19,7 +19,9 @@ constructor(
         account.operation {
             val id = owner()
             refresh({ dao.profile(id) != null }) {
-                dao.saveProfile(profileApi.profile(auth).entity())
+                val profile = profileApi.profile(auth).entity()
+                if (dao.profile(id)?.premium != profile.premium) { dao.invalidateCatalog(id); catalogChanged() }
+                dao.saveProfile(profile)
             }
             checkNotNull(dao.profile(id)).ui()
         }

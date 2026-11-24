@@ -29,8 +29,9 @@ constructor(
     @ApplicationContext context: Context,
     private val profileApi: ProfileApi,
     private val dao: ProfileDao,
+    @javax.inject.Named("serverNamespace") namespace: String = "",
 ) {
-    private val prefs = context.getSharedPreferences("film_session", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("film_session" + namespace, Context.MODE_PRIVATE)
     private val mutex = Mutex()
     private val token
         get() = prefs.getString("token", "").orEmpty()
@@ -68,6 +69,7 @@ constructor(
                     },
                     e,
                 )
+            } catch (e: RequestFailure) { throw e
             } catch (e: IOException) {
                 throw RequestFailure(R.string.connection_error, e)
             }
@@ -75,6 +77,8 @@ constructor(
     }
 
     // Existing installations have a token but no locally stored account ID.
+    internal val cachedOwner get() = prefs.getLong("account_id", -1)
+
     internal suspend fun owner(): Long {
         val id = prefs.getLong("account_id", -1)
         if (id >= 0) return id

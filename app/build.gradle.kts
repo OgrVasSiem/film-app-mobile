@@ -11,7 +11,7 @@ fun String.asBuildConfigString(): String =
         .replace("\n", "\\n").replace("\r", "\\r") + "\""
 
 val debugApiUrl = providers.gradleProperty("API_BASE_URL_DEBUG")
-    .orElse("http://10.0.2.2:8081/api/v1/")
+    .orElse("http://127.0.0.1:8081/api/v1/")
 val releaseApiUrl = providers.gradleProperty("API_BASE_URL_RELEASE")
     .orElse("")
 
@@ -98,6 +98,8 @@ dependencies {
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(platform(libs.okhttp.bom))
+    androidTestImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.room.runtime)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -69,4 +69,6 @@
     <string name="open_premium">✦ Премиум</string>
     <string name="premium_offer">С полным доступом вы сможете открыть эту подборку и все остальные премиум-паки и смотреть карточки без рекламы.</string>
     <string name="pack_completed">Пройден</string>
+    <string name="refresh_catalog">Обновить каталог</string>
+    <string name="refresh_deck">Обновить колоду</string>
 </resources>

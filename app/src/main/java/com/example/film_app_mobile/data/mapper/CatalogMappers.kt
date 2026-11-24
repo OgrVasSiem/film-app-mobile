@@ -11,7 +11,7 @@ internal fun ProfileEntity.ui() = Profile(id, login, premium, adsEnabled)
 internal fun PackDto.entity(owner: Long, index: Int) =
     PackEntity(owner, id, title, description, premium, locked, index, coverUrl, isCompleted)
 
-internal fun PackEntity.ui() = Pack(id, title, description, premium, locked, coverUrl, isCompleted)
+internal fun PackEntity.ui() = Pack(id, title, description, premium, locked, coverHash, isCompleted)
 
 internal fun FilmDto.entity(owner: Long) =
     FilmEntity(

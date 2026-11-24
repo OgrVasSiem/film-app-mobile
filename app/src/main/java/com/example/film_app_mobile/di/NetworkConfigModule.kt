@@ -12,6 +12,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkConfigModule {
     @Provides
+    @javax.inject.Named("serverNamespace")
+    fun namespace(config: NetworkConfig): String =
+        if (config.baseUrl == "http://127.0.0.1:8081/api/v1/") ""
+        else "-" + java.security.MessageDigest.getInstance("SHA-256").digest(config.baseUrl.toByteArray()).joinToString("") { "%02x".format(it) }
+
+    @Provides
     @Singleton
     fun provideNetworkConfig(): NetworkConfig =
         NetworkConfig(

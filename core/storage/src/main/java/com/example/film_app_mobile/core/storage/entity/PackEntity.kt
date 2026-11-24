@@ -13,4 +13,6 @@ data class PackEntity(
     val position: Int,
     val coverUrl: String? = null,
     @androidx.room.ColumnInfo(defaultValue = "0") val isCompleted: Boolean = false,
+    val coverHash: String? = null,
+    val coverMime: String? = null,
 )

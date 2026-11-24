@@ -7,5 +7,6 @@ data class DeckState(
     val total: Int = 0,
     val saved: Int = 0,
     val skipped: Int = 0,
+    val nextCursor: String? = null,
     val loaded: Boolean = false,
 )

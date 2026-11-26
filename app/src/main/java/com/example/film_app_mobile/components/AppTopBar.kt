@@ -1,5 +1,6 @@
 package com.example.film_app_mobile.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,10 +18,13 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.film_app_mobile.R
 import com.example.film_app_mobile.core.designsystem.component.AppText
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.presentation.RequestStatus
@@ -32,11 +36,10 @@ internal fun AppTopBar(
     subtitle: String? = null,
     background: Color = AppTheme.colors.surface,
     action: @Composable () -> Unit = {},
-    back: @Composable () -> Unit = {},
+    back: () -> Unit
 ) {
     val titleUi: @Composable () -> Unit = {
-        Column(
-        ) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (icon != null) {
                     Icon(
@@ -52,16 +55,27 @@ internal fun AppTopBar(
                 AppText(title, style = AppTheme.typography.title, maxLines = 1)
             }
 
-            subtitle?.let { AppText(it, style = AppTheme.typography.caption, maxLines = 1) }
+            subtitle?.let { AppText(text = it, style = AppTheme.typography.caption, maxLines = 1) }
         }
     }
 
     TopAppBar(
         title = titleUi,
         actions = { action() },
-        navigationIcon = back,
+        navigationIcon = {
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_back),
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(start = 12.dp)
+                    .clickable {
+                        back()
+                    },
+                tint = Color.Unspecified
+            )
+        },
         windowInsets = WindowInsets(0),
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = background),
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = background)
     )
 }
 

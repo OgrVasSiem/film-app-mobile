@@ -6,18 +6,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
+import com.example.film_app_mobile.core.dataStore.ContentTypeDataStore
+import com.example.film_app_mobile.core.dataStore.ThemeDataStore
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.core.network.*
 import com.example.film_app_mobile.core.network.api.*
 import com.example.film_app_mobile.core.network.dto.*
-import com.example.film_app_mobile.core.storage.FilmDatabase
 import com.example.film_app_mobile.data.mapper.*
 import com.example.film_app_mobile.data.repository.*
+import com.example.film_app_mobile.data.repository.SectionRepository
 import com.example.film_app_mobile.data.session.*
-import com.example.film_app_mobile.data.sync.DecisionSync
 import com.example.film_app_mobile.feature.auth.*
+import com.example.film_app_mobile.feature.home.HomeViewModel
 import com.example.film_app_mobile.feature.home.bottomSheets.PremiumOfferSheet
 import com.example.film_app_mobile.feature.profile.*
 import java.io.File
@@ -33,14 +34,14 @@ class AccountJourneyTest {
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    private lateinit var db: FilmDatabase
     private lateinit var account: AccountSession
     private lateinit var auth: AuthRepository
     private lateinit var profiles: ProfileRepository
     private lateinit var profileVm: ProfileViewModel
-    private val network by lazy {
-        NetworkStack(NetworkConfig(BuildConfig.API_BASE_URL, true)).retrofit
-    }
+    private val stack by lazy { NetworkStack(NetworkConfig(BuildConfig.API_BASE_URL, true)) }
+    private val network
+        get() = stack.retrofit
+
     private val profileApi by lazy { network.create(ProfileApi::class.java) }
     private val authApi by lazy { network.create(AuthApi::class.java) }
     private val library by lazy { network.create(LibraryApi::class.java) }
@@ -52,26 +53,31 @@ class AccountJourneyTest {
     @Before
     fun setup() {
         Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("liveAccount") == "true")
-        db = Room.databaseBuilder(context, FilmDatabase::class.java, "account-journey.db").build()
-        account = AccountSession(context, profileApi, db.profile(), namespace)
-        auth = AuthRepository(account, authApi, DecisionSync(account, library, db.library()) {})
-        profiles = ProfileRepository(account, profileApi, db.profile())
-        profileVm = ProfileViewModel(profiles, auth)
-    }
-
-    @After
-    fun close() {
-        if (::db.isInitialized) db.close()
+        account = AccountSession(context, profileApi, namespace)
+        auth = AuthRepository(account, authApi)
+        profiles = ProfileRepository(account, profileApi)
+        profileVm = ProfileViewModel(profiles, auth, ThemeDataStore(context))
     }
 
     private fun render(premium: Boolean = false) {
         val authVm = AuthViewModel(auth)
+        val homeVm =
+            if (premium)
+                HomeViewModel(
+                    SectionRepository(account, stack),
+                    profiles,
+                    ContentTypeDataStore(context),
+                )
+            else null
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent {
                 AppTheme {
                     val mode by account.session.collectAsState()
                     if (mode == SessionMode.Guest) AuthRoute(authVm)
-                    else if (premium) PremiumOfferSheet(profileVm) {} else ProfileRoute(profileVm)
+                    else if (homeVm != null) {
+                        val homeState by homeVm.viewState.collectAsState()
+                        PremiumOfferSheet(homeState, homeVm)
+                    } else ProfileRoute(profileVm)
                 }
             }
         }
@@ -116,10 +122,9 @@ class AccountJourneyTest {
         val film = runBlocking {
             val packs = network.create(PacksApi::class.java)
             val pack = packs.catalog(account.auth, null).body()!!.packs.first { !it.locked }
-            packs.page(account.auth, pack.id, 10, null).items.first().entity(initial.id).ui()
+            packs.page(account.auth, pack.id, 10, null).items.first().ui()
         }
-        val sync = DecisionSync(account, library, db.library()) {}
-        val decisions = LibraryRepository(account, library, db.library(), sync)
+        val decisions = SectionRepository(account, stack)
         val saved = kotlinx.coroutines.CompletableDeferred<Unit>()
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent {
@@ -131,7 +136,13 @@ class AccountJourneyTest {
                         androidx.compose.ui.Modifier.fillMaxSize().testTag("journey-card"),
                     ) { movie, status, _ ->
                         scope.launch {
-                            runCatching { decisions.decide(movie, status, false) }
+                            runCatching {
+                                    decisions.decide(
+                                        com.example.film_app_mobile.core.models.ContentType.FILM,
+                                        movie.id,
+                                        status,
+                                    )
+                                }
                                 .onSuccess { saved.complete(Unit) }
                                 .onFailure { saved.completeExceptionally(it) }
                         }
@@ -203,7 +214,6 @@ class AccountJourneyTest {
         waitFor(R.string.delete_warning)
         click(R.string.delete_account)
         waitFor(R.string.account_start)
-        assertNull(runBlocking { db.profile().profile(id) })
         assertFalse(account.signedIn)
         val failure =
             runCatching { runBlocking { authApi.login(CredentialsDto(data[0], data[1])) } }

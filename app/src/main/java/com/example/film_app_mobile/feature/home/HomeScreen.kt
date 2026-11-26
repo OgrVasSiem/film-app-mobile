@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -18,39 +17,41 @@ import com.example.film_app_mobile.core.models.*
 import com.example.film_app_mobile.feature.home.bottomSheets.PremiumOfferSheet
 import com.example.film_app_mobile.feature.home.components.HomeCatalog
 import com.example.film_app_mobile.feature.home.components.HomeStreakBadge
+import com.example.film_app_mobile.feature.home.state.HomeState
 import kotlinx.coroutines.flow.drop
 
 @Composable
-internal fun HomeScreen(
-    open: (DeckSource) -> Unit,
-    selection: ContentSelectionViewModel = hiltViewModel(),
-) {
-    val selected by selection.selection.collectAsStateWithLifecycle(initialValue = null)
-    selected?.let { type ->
-        key(type) { HomeScreenContent(type = type, switch = selection::select, open) }
+internal fun HomeScreen(open: (DeckSource) -> Unit, viewModel: HomeViewModel = hiltViewModel()) {
+    val state by viewModel.viewState.collectAsStateWithLifecycle()
+
+    if (state.contentType == null) {
+        InitialLoading()
+    } else {
+        key(state.contentType) {
+            HomeScreenContent(open = open, viewModel = viewModel, state = state)
+        }
     }
 }
 
 @Composable
 private fun HomeScreenContent(
-    type: ContentType,
-    switch: (ContentType) -> Unit,
     open: (DeckSource) -> Unit,
-    vm: HomeViewModel = hiltViewModel(key = type.name),
+    viewModel: HomeViewModel,
+    state: HomeState,
 ) {
-    val ui by vm.viewState.collectAsStateWithLifecycle()
-    val busy = vm.request.status.busy
+    val type = state.contentType ?: return
+    val busy = state.request.busy
 
-    LifecycleResumeEffect(vm) {
-        vm.load(type)
+    LifecycleResumeEffect(viewModel, type) {
+        viewModel.load(type)
         onPauseOrDispose {}
     }
 
-    LaunchedEffect(vm) { vm.changes.drop(1).collect { vm.load(type) } }
+    LaunchedEffect(viewModel, type) { viewModel.changes.drop(1).collect { viewModel.load(type) } }
 
-    ui.detail?.let { CatalogDetailSheet(type, it) { vm.dismissDetails() } }
+    state.detail?.let { CatalogDetailSheet(type = type, film = it) { viewModel.dismissDetails() } }
 
-    if (ui.showPremiumOffer) PremiumOfferSheet { vm.premiumOffer(false) }
+    if (state.showPremiumOffer) PremiumOfferSheet(state, viewModel)
 
     val labels =
         mapOf(
@@ -65,10 +66,10 @@ private fun HomeScreenContent(
         )
 
     CatalogDeadline(
-        ui.catalog?.catalog?.sections?.mapNotNull { it.nextRefreshAt }?.minOrNull(),
-        { vm.request.status.busy },
+        state.catalog?.sections?.mapNotNull { it.nextRefreshAt }?.minOrNull(),
+        { state.request.busy },
     ) {
-        vm.load(type)
+        viewModel.load(type)
     }
 
     Scaffold(
@@ -77,37 +78,35 @@ private fun HomeScreenContent(
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.app_name),
-                icon = painterResource(R.drawable.round_app_icon),
                 action = {
-                    ui.streak?.let {
+                    state.streak?.let {
                         HomeStreakBadge(days = it, modifier = Modifier.padding(end = 12.dp))
                     }
                 },
+                back = {},
             )
         },
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad).padding(horizontal = 12.dp)) {
-            ContentTypeSwitch(type = type, switch = switch)
+            ContentTypeSwitch(type = type, switch = viewModel::selectContentType)
 
-            RequestFeedback(vm.request.status)
-
-            if (vm.request.status.error != null)
-                Link(stringResource(R.string.retry), true, vm.request::retry)
+            RequestFeedback(status = state.request)
 
             Column(
-                Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                ui.catalog?.let {
+                state.catalog?.let {
                     HomeCatalog(
                         snapshot = it,
-                        vm = vm,
+                        state = state,
+                        vm = viewModel,
                         type = type,
                         busy = busy,
                         labels = labels,
                         open = open,
                     ) {
-                        vm.premiumOffer(true)
+                        viewModel.premiumOffer(true)
                     }
                 }
             }

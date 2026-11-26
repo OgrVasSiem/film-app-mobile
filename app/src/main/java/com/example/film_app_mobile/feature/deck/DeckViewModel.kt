@@ -2,6 +2,7 @@ package com.example.film_app_mobile.feature.deck
 
 import androidx.compose.runtime.*
 import androidx.lifecycle.*
+import com.example.film_app_mobile.core.dataStore.ContentTypeDataStore
 import com.example.film_app_mobile.core.models.*
 import com.example.film_app_mobile.core.network.dto.*
 import com.example.film_app_mobile.data.repository.ProfileRepository
@@ -11,18 +12,44 @@ import com.example.film_app_mobile.presentation.ScreenRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 internal class DeckViewModel
 @Inject
-constructor(private val repo: SectionRepository, private val profiles: ProfileRepository) :
-    ViewModel() {
-    val request = ScreenRequest(viewModelScope)
+constructor(
+    private val repo: SectionRepository,
+    private val profiles: ProfileRepository,
+    private val contentTypeStore: ContentTypeDataStore,
+) : ViewModel() {
+
     val changes
         get() = repo.changes
 
     private val _viewState = MutableStateFlow(DeckState())
     val viewState: StateFlow<DeckState> = _viewState.asStateFlow()
+    val request =
+        ScreenRequest(viewModelScope) { status -> _viewState.update { it.copy(request = status) } }
+
+    init {
+        viewModelScope.launch {
+            contentTypeStore.selection.collect { type ->
+                if (viewState.value.contentType != type) {
+                    request.reset()
+                    _viewState.update { DeckState(contentType = type) }
+                }
+            }
+        }
+    }
+
+    fun horizontalProgress(value: Float) {
+        _viewState.update { it.copy(horizontalProgress = value) }
+    }
+
+    fun downwardProgress(value: Float) {
+        _viewState.update { it.copy(downwardProgress = value) }
+    }
+
     private var detail: FilmDto?
         get() = viewState.value.detail
         set(value) {
@@ -59,7 +86,7 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
             _viewState.update { it.copy(undo = value) }
         }
 
-    private var catalog: CachedCatalog?
+    private var catalog: CatalogDto?
         get() = viewState.value.catalog
         set(value) {
             _viewState.update { it.copy(catalog = value) }
@@ -71,14 +98,13 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
             _viewState.update { it.copy(deckState = value) }
         }
 
-    fun load(type: ContentType, deck: DeckSource) = request.run { refresh(type, deck) }
+    fun load(type: ContentType, deck: DeckSource) {
+        if (viewState.value.contentType != type) return
+        request.run { refresh(type, deck) }
+    }
 
     private suspend fun refresh(type: ContentType, deck: DeckSource) {
-        repo.cachedPage(type, repo.deckPath(deck), null)?.let {
-            cards = it.items
-            cursor = it.nextCursor
-        }
-        if (deck is DeckSource.Editorial) catalog = repo.cached(type) ?: repo.catalog(type)
+        if (deck is DeckSource.Editorial) catalog = repo.catalog(type)
         if (deck is DeckSource.Periodic) catalog = repo.catalog(type)
         page(type, deck, null)
     }
@@ -89,7 +115,7 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
     private suspend fun page(type: ContentType, deck: DeckSource, after: String?) {
         val result =
             try {
-                repo.page(type, repo.deckPath(deck), null, after)
+                repo.page(type, repo.deckPath(deck), null, after, cards)
             } catch (e: com.example.film_app_mobile.data.error.RequestFailure) {
                 if (e.messageId == com.example.film_app_mobile.R.string.premium_required) {
                     cards = emptyList()
@@ -112,10 +138,8 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
         reject: () -> Unit = {},
     ) =
         request.run {
-            val remaining =
-                if (target != null) FilmPageDto(cards.filterNot { it.id == id }, cursor) else null
             try {
-                repo.decide(type, id, target, remaining, repo.deckPath(deck))
+                repo.decide(type, id, target)
             } catch (e: Exception) {
                 reject()
                 throw e

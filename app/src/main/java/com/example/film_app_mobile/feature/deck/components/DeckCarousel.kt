@@ -70,45 +70,48 @@ internal fun DeckCarousel(
                 }
         }
     }
+
     val turn by
         rememberUpdatedState<(Float, String?) -> Unit> { target, decision ->
             settle(target, decision)
         }
+
     Box(
-        modifier
-            .background(
-                androidx.compose.ui.graphics.lerp(
-                    AppTheme.colors.background,
-                    if (vertical) AppTheme.colors.watched
-                    else if (position > 0) AppTheme.colors.swipeLike
-                    else AppTheme.colors.swipeDislike,
-                    (abs(position) * 2).coerceAtMost(1f),
+        modifier =
+            modifier
+                .background(
+                    androidx.compose.ui.graphics.lerp(
+                        AppTheme.colors.background,
+                        if (vertical) AppTheme.colors.watched
+                        else if (position > 0) AppTheme.colors.swipeLike
+                        else AppTheme.colors.swipeDislike,
+                        (abs(position) * 2).coerceAtMost(1f),
+                    )
                 )
-            )
-            .clipToBounds()
-            .pointerInput(current.id, enabled) {
-                if (enabled) {
-                    try {
-                        trackDeckSwipe(
-                            move = { down, fraction ->
-                                vertical = down
-                                position = fraction
-                            },
-                            release = { decision ->
-                                val target =
-                                    when (decision) {
-                                        null -> 0f
-                                        "WONT_WATCH" -> -1f
-                                        else -> 1f
-                                    }
-                                turn(target, decision)
-                            },
-                        )
-                    } finally {
-                        if (!settling) position = 0f
+                .clipToBounds()
+                .pointerInput(current.id, enabled) {
+                    if (enabled) {
+                        try {
+                            trackDeckSwipe(
+                                move = { down, fraction ->
+                                    vertical = down
+                                    position = fraction
+                                },
+                                release = { decision ->
+                                    val target =
+                                        when (decision) {
+                                            null -> 0f
+                                            "WONT_WATCH" -> -1f
+                                            else -> 1f
+                                        }
+                                    turn(target, decision)
+                                },
+                            )
+                        } finally {
+                            if (!settling) position = 0f
+                        }
                     }
-                }
-            },
+                },
         contentAlignment = Alignment.Center,
     ) {
         val visible = cards.take(3)
@@ -142,30 +145,34 @@ internal fun DeckCarousel(
                     .background(AppTheme.colors.surface)
                     .then(if (slot == 0) Modifier else Modifier.clearAndSetSemantics {})
             ) {
-                DeckPoster(film, type, depth, openDetail)
+                DeckPoster(movie = film, type = type, openDetail = openDetail)
+
                 if (slot == 0 && position != 0f)
                     Spacer(
-                        Modifier.matchParentSize()
-                            .background(
-                                (if (vertical) AppTheme.colors.watched
-                                    else if (position > 0f) AppTheme.colors.swipeLike
-                                    else AppTheme.colors.swipeDislike)
-                                    .copy(alpha = abs(position).coerceAtMost(1f) * .24f)
-                            )
+                        modifier =
+                            Modifier.matchParentSize()
+                                .background(
+                                    (if (vertical) AppTheme.colors.watched
+                                        else if (position > 0f) AppTheme.colors.swipeLike
+                                        else AppTheme.colors.swipeDislike)
+                                        .copy(alpha = abs(position).coerceAtMost(1f) * .24f)
+                                )
                     )
             }
         }
         if (abs(position) > .025f)
             AppText(
-                stringResource(
-                    if (vertical) R.string.watched
-                    else if (position > 0) R.string.like_gesture else R.string.dislike_gesture
-                ),
-                Modifier.align(Alignment.BottomCenter)
-                    .padding(bottom = 28.dp)
-                    .zIndex(3f)
-                    .graphicsLayer { rotationZ = if (position > 0) -25f else 25f }
-                    .padding(12.dp),
+                text =
+                    stringResource(
+                        if (vertical) R.string.watched
+                        else if (position > 0) R.string.like_gesture else R.string.dislike_gesture
+                    ),
+                modifier =
+                    Modifier.align(Alignment.BottomCenter)
+                        .padding(bottom = 28.dp)
+                        .zIndex(3f)
+                        .graphicsLayer { rotationZ = if (position > 0) -25f else 25f }
+                        .padding(12.dp),
                 color =
                     if (vertical) AppTheme.colors.watched
                     else if (position > 0) AppTheme.colors.swipeLike

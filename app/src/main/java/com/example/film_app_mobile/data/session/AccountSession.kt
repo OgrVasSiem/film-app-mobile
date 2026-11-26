@@ -7,10 +7,7 @@ import com.example.film_app_mobile.core.dataStore.PremiumDataStore
 import com.example.film_app_mobile.core.network.api.ProfileApi
 import com.example.film_app_mobile.core.network.dto.ProfileDto
 import com.example.film_app_mobile.core.network.dto.SessionDto
-import com.example.film_app_mobile.core.storage.dao.ProfileDao
 import com.example.film_app_mobile.data.error.RequestFailure
-import com.example.film_app_mobile.data.error.temporary
-import com.example.film_app_mobile.data.mapper.entity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import javax.inject.Inject
@@ -37,11 +34,8 @@ class AccountSession
 constructor(
     @ApplicationContext context: Context,
     private val profileApi: ProfileApi,
-    private val dao: ProfileDao,
     @Named("serverNamespace") private val namespace: String = "",
     private val premiumStore: PremiumDataStore = PremiumDataStore(context),
-    private val scheduler: com.example.film_app_mobile.data.sync.SyncScheduler =
-        com.example.film_app_mobile.data.sync.SyncScheduler {},
 ) {
     private val prefs = context.getSharedPreferences("film_session$namespace", Context.MODE_PRIVATE)
     private val mutex = Mutex()
@@ -69,20 +63,14 @@ constructor(
             if (id == null) flowOf(null) else premiumStore.observe(namespace, id)
         }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    internal val profileChanges =
-        activeOwner.flatMapLatest { id -> if (id == null) flowOf(null) else dao.observe(id) }
+    private val profile = MutableStateFlow<ProfileDto?>(null)
+    internal val profileChanges = profile.asStateFlow()
 
-    internal suspend fun saveProfile(profile: ProfileDto) {
-        val changed = dao.profile(profile.id)?.premium != profile.premium
-        dao.saveProfile(profile.entity())
-        premiumStore.save(namespace, profile.id, profile.premium)
-        if (changed) {
-            dao.invalidateCatalog(profile.id)
-            dao.invalidateSectionSnapshots(profile.id)
-            scheduler.enqueue()
-            catalogChanged()
-        }
+    internal suspend fun saveProfile(value: ProfileDto) {
+        val changed = profile.value?.premium != value.premium
+        premiumStore.save(namespace, value.id, value.premium)
+        profile.value = value
+        if (changed) catalogChanged()
     }
 
     private val changes = MutableStateFlow(0L)
@@ -110,20 +98,15 @@ constructor(
                 activeOwner.value = profile.id
                 mode.value = SessionMode.Server
             }
-        } catch (e: RequestFailure) {
-            if (signedIn && e.temporary)
-                dao.profile(cachedOwner)?.let { premiumStore.save(namespace, it.id, it.premium) }
-            if (signedIn)
-                mode.value =
-                    if (cachedOwner >= 0 && dao.profile(cachedOwner) != null && e.temporary)
-                        SessionMode.Server
-                    else SessionMode.Retry
+        } catch (_: RequestFailure) {
+            if (signedIn) mode.value = SessionMode.Retry
         }
     }
 
-    internal suspend fun requireProtectedProfile() {
-        if (dao.profile(owner())?.passwordProtected != true)
+    internal fun requireProtectedProfile() {
+        if (profile.value?.passwordProtected != true) {
             throw RequestFailure(R.string.logout_requires_password)
+        }
     }
 
     internal suspend fun <T> operation(block: suspend AccountSession.() -> T): T {
@@ -157,24 +140,11 @@ constructor(
     internal val cachedOwner
         get() = prefs.getLong("account_id", -1)
 
-    internal suspend fun owner(): Long {
-        val id = prefs.getLong("account_id", -1)
-        if (id >= 0) return id
-        val profile = profileApi.profile(auth)
-        saveProfile(profile)
-        activeOwner.value = profile.id
-        prefs.edit { putLong("account_id", profile.id) }
-        return profile.id
-    }
-
     internal val signedIn
         get() = token.isNotEmpty()
 
-    internal suspend fun start(result: SessionDto, newAccount: Boolean = false) {
-        if (dao.profile(result.account.id)?.premium != result.account.premium) {
-            dao.invalidateSectionSnapshots(result.account.id)
-        }
-        dao.switchAccount(result.account.entity(), newAccount)
+    internal suspend fun start(result: SessionDto) {
+        saveProfile(result.account)
         check(
             prefs
                 .edit()
@@ -183,7 +153,6 @@ constructor(
                 .remove("token")
                 .commit()
         )
-        premiumStore.save(namespace, result.account.id, result.account.premium)
         activeOwner.value = result.account.id
         token = result.token
         mode.value = SessionMode.Server
@@ -192,6 +161,7 @@ constructor(
     internal suspend fun endSession() {
         val id = cachedOwner
         activeOwner.value = null
+        profile.value = null
         check(prefs.edit().remove("encrypted").remove("token").remove("account_id").commit())
         token = ""
         mode.value = SessionMode.Guest

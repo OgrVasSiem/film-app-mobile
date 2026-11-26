@@ -3,6 +3,7 @@ package com.example.film_app_mobile.feature.home.components
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,7 +15,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.film_app_mobile.R
 import com.example.film_app_mobile.components.*
 import com.example.film_app_mobile.core.designsystem.component.AppText
@@ -22,14 +22,17 @@ import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.core.models.*
 import com.example.film_app_mobile.core.network.dto.*
 import com.example.film_app_mobile.feature.home.HomeViewModel
-import java.io.IOException
+import com.example.film_app_mobile.feature.home.state.HomeState
+import kotlin.collections.firstOrNull
 import kotlin.collections.get
+import kotlin.collections.orEmpty
 
 private val card = RoundedCornerShape(16.dp)
 
 @Composable
 internal fun HomeCatalog(
-    snapshot: CachedCatalog,
+    snapshot: CatalogDto,
+    state: HomeState,
     vm: HomeViewModel,
     type: ContentType,
     busy: Boolean,
@@ -37,66 +40,28 @@ internal fun HomeCatalog(
     open: (DeckSource) -> Unit,
     onLockedPack: () -> Unit,
 ) {
-    val ui by vm.viewState.collectAsStateWithLifecycle()
-    val sections = snapshot.catalog.sections.associateBy { it.key }
+    val sections = snapshot.sections.associateBy { it.key }
     val periods = listOf("DAY", "WEEK", "MONTH").mapNotNull(sections::get)
-    val expanded = ui.periodsExpanded
 
     if (periods.isNotEmpty()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AppText(
-                stringResource(R.string.home_daily),
-                Modifier.weight(1f),
-                style = AppTheme.typography.title,
-            )
+        AppText(text = stringResource(R.string.home_daily), style = AppTheme.typography.title)
 
-            AppText(
-                stringResource(if (expanded) R.string.home_fold else R.string.home_all),
-                Modifier.clickable(onClick = vm::togglePeriods).padding(8.dp),
-                color = AppTheme.colors.accent,
-            )
-        }
-        val tile: @Composable (CatalogSection) -> Unit = { section ->
-            val title = stringResource(labels.getValue(section.key))
-            val posters = preview(vm, type, section, snapshot.etag)
-            Box(
-                Modifier.width(if (expanded) 340.dp else 240.dp)
-                    .height(160.dp)
-                    .clip(card)
-                    .background(AppTheme.colors.surface)
-                    .clickable(enabled = section.state == "READY") {
-                        open(DeckSource.Periodic(Period.valueOf(section.key)))
-                    }
-            ) {
-                Poster(posters.firstOrNull(), Modifier.fillMaxSize(), ContentScale.Crop)
-
-                Shade()
-
-                Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-                    AppText(
-                        stringResource(R.string.home_count, section.availableCount),
-                        color = AppTheme.colors.onPoster,
-                        style = AppTheme.typography.caption,
-                    )
-                    AppText(
-                        title,
-                        color = AppTheme.colors.onPoster,
-                        style = AppTheme.typography.title,
-                    )
-                }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(periods) { section ->
+                HomeDaily(
+                    labels = labels,
+                    previewPosters = state.previewPosters,
+                    open = open,
+                    section = section,
+                )
             }
         }
-
-        if (expanded) periods.forEach { tile(it) }
-        else
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(periods.size) { tile(periods[it]) }
-            }
     }
 
     sections["FOR_YOU"]?.let { section ->
         val title = stringResource(R.string.home_evening)
-        val posters = preview(vm, type, section, snapshot.etag)
+        val posters = state.previewPosters[section.key].orEmpty()
+
         Row(
             Modifier.fillMaxWidth()
                 .heightIn(min = 80.dp)
@@ -106,7 +71,7 @@ internal fun HomeCatalog(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(78.dp, 60.dp)) {
+            Box(modifier = Modifier.size(78.dp, 60.dp)) {
                 repeat(3) { i ->
                     Box(
                         Modifier.offset(x = (i * 14 + 5).dp, y = 3.dp)
@@ -115,12 +80,18 @@ internal fun HomeCatalog(
                             .clip(RoundedCornerShape(5.dp))
                             .background(AppTheme.colors.border)
                     ) {
-                        Poster(posters.getOrNull(i), Modifier.fillMaxSize(), ContentScale.Crop)
+                        Poster(
+                            url = posters.getOrNull(i),
+                            modifier = Modifier.fillMaxSize(),
+                            scale = ContentScale.Crop,
+                        )
                     }
                 }
             }
+
             Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                AppText(title, style = AppTheme.typography.button)
+                AppText(text = title, style = AppTheme.typography.button)
+
                 AppText(
                     when (section.state) {
                         "READY" -> stringResource(R.string.home_count, section.availableCount)
@@ -132,6 +103,7 @@ internal fun HomeCatalog(
                     color = AppTheme.colors.textSecondary,
                 )
             }
+
             AppText("→", color = AppTheme.colors.accent, style = AppTheme.typography.title)
         }
     }
@@ -143,7 +115,7 @@ internal fun HomeCatalog(
                 Modifier.weight(1f),
                 style = AppTheme.typography.title,
             )
-            ui.undo?.let { id ->
+            state.undo?.let { id ->
                 AppText(
                     stringResource(R.string.undo_choice),
                     Modifier.clickable(enabled = !busy) { vm.choose(type, id, null) }.padding(8.dp),
@@ -151,28 +123,37 @@ internal fun HomeCatalog(
                 )
             }
         }
-        ui.single?.let { film ->
+
+        state.single?.let { film ->
             Column(
-                Modifier.fillMaxWidth().background(AppTheme.colors.surface, card).padding(14.dp)
+                modifier =
+                    Modifier.fillMaxWidth().background(AppTheme.colors.surface, card).padding(14.dp)
             ) {
                 Row(
-                    Modifier.fillMaxWidth().clickable { vm.details(type, film.id) },
+                    modifier = Modifier.fillMaxWidth().clickable { vm.details(type, film.id) },
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Box(
-                        Modifier.fillMaxWidth(.35f)
-                            .aspectRatio(2f / 3f)
-                            .clip(card)
-                            .background(AppTheme.colors.border)
+                        modifier =
+                            Modifier.fillMaxWidth(.35f)
+                                .aspectRatio(2f / 3f)
+                                .clip(card)
+                                .background(AppTheme.colors.border)
                     ) {
-                        Poster(film.posterUrl, Modifier.fillMaxSize(), ContentScale.Crop)
+                        Poster(
+                            url = film.posterUrl,
+                            modifier = Modifier.fillMaxSize(),
+                            scale = ContentScale.Crop,
+                        )
+
                         film.rating?.let {
                             AppText(
-                                "★ " + it.value,
-                                Modifier.align(Alignment.TopStart)
-                                    .padding(5.dp)
-                                    .background(AppTheme.colors.goldSurface, card)
-                                    .padding(4.dp),
+                                text = "★ " + it.value,
+                                modifier =
+                                    Modifier.align(Alignment.TopStart)
+                                        .padding(5.dp)
+                                        .background(AppTheme.colors.goldSurface, card)
+                                        .padding(4.dp),
                                 color = AppTheme.colors.gold,
                             )
                         }
@@ -247,31 +228,41 @@ internal fun HomeCatalog(
             style = AppTheme.typography.title,
         )
 
-        for (pack in snapshot.catalog.packs) {
+        for ((id, title, description, premium, locked, coverUrl, isCompleted, availableCount) in
+            snapshot.packs) {
             Box(
                 Modifier.fillMaxWidth().height(148.dp).clip(card).clickable {
-                    if (pack.locked) onLockedPack() else open(DeckSource.Editorial(pack.id))
+                    if (locked) onLockedPack() else open(DeckSource.Editorial(id))
                 }
             ) {
-                PackCover(snapshot.hashes[pack.coverUrl], Modifier.fillMaxSize(), pack.isCompleted)
-                Shade()
+                PackCover(snapshot.covers[coverUrl], Modifier.fillMaxSize(), isCompleted)
+
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(AppTheme.colors.transparent, AppTheme.colors.posterScrim)
+                                )
+                            )
+                )
+
                 Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
                     AppText(
-                        if (pack.premium)
+                        if (premium)
                             stringResource(
-                                if (pack.locked) R.string.locked_premium else R.string.open_premium
+                                if (locked) R.string.locked_premium else R.string.open_premium
                             )
-                        else stringResource(R.string.home_count, pack.availableCount),
-                        color = if (pack.premium) AppTheme.colors.gold else AppTheme.colors.onPoster,
+                        else stringResource(R.string.home_count, availableCount),
+                        color = if (premium) AppTheme.colors.gold else AppTheme.colors.onPoster,
                     )
                     AppText(
-                        pack.title,
+                        title,
                         style = AppTheme.typography.title,
                         color = AppTheme.colors.onPoster,
                     )
                     AppText(
-                        if (pack.isCompleted) stringResource(R.string.completed_v2)
-                        else pack.description,
+                        if (isCompleted) stringResource(R.string.completed_v2) else description,
                         maxLines = 2,
                         color = AppTheme.colors.onPosterSecondary,
                         style = AppTheme.typography.caption,
@@ -279,39 +270,53 @@ internal fun HomeCatalog(
                 }
             }
         }
-        if (snapshot.catalog.packs.isEmpty()) AppText(stringResource(R.string.empty_list))
+        if (snapshot.packs.isEmpty()) AppText(stringResource(R.string.empty_list))
     }
 }
 
 @Composable
-private fun Shade() {
-    Box(
-        Modifier.fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(AppTheme.colors.transparent, AppTheme.colors.posterScrim)
-                )
-            )
-    )
-}
-
-@Composable
-private fun preview(
-    vm: HomeViewModel,
-    type: ContentType,
+fun HomeDaily(
+    labels: Map<String, Int>,
+    previewPosters: Map<String, List<String?>> = emptyMap(),
+    open: (DeckSource) -> Unit,
     section: CatalogSection,
-    etag: String?,
-): List<String?> {
-    val urls by
-        produceState(emptyList(), type, section, etag) {
-            value =
-                if (section.state == "READY")
-                    try {
-                        vm.preview(type, section.key)
-                    } catch (_: IOException) {
-                        emptyList()
-                    }
-                else emptyList()
+) {
+    val title = stringResource(labels.getValue(section.key))
+    val posters = previewPosters[section.key].orEmpty()
+
+    Box(
+        Modifier.width(240.dp)
+            .height(160.dp)
+            .clip(card)
+            .background(AppTheme.colors.surface)
+            .clickable(enabled = section.state == "READY") {
+                open(DeckSource.Periodic(Period.valueOf(section.key)))
+            }
+    ) {
+        Poster(
+            url = posters.firstOrNull(),
+            modifier = Modifier.fillMaxSize(),
+            scale = ContentScale.Crop,
+        )
+
+        Box(
+            modifier =
+                Modifier.fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(AppTheme.colors.transparent, AppTheme.colors.posterScrim)
+                        )
+                    )
+        )
+
+        Column(modifier = Modifier.align(Alignment.BottomStart).padding(14.dp)) {
+            AppText(
+                stringResource(R.string.home_count, section.availableCount),
+                color = AppTheme.colors.onPoster,
+                style = AppTheme.typography.caption,
+            )
+
+            AppText(title, color = AppTheme.colors.onPoster, style = AppTheme.typography.title)
         }
-    return urls
+    }
 }

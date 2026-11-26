@@ -23,7 +23,10 @@ import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.core.models.ContentType
 
 @Composable
-internal fun ContentTypeSwitch(type: ContentType, switch: (ContentType) -> Unit) {
+internal fun ContentTypeSwitch(
+    type: ContentType,
+    switch: (ContentType) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

@@ -13,13 +13,21 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class MainViewModel
+internal class MainViewModel
 @Inject
 constructor(
     private val account: com.example.film_app_mobile.data.session.AccountSession,
     private val profiles: com.example.film_app_mobile.data.repository.ProfileRepository,
+    connection: com.example.film_app_mobile.data.session.InternetConnection,
     private val themeStore: ThemeDataStore,
 ) : ViewModel() {
+    val internetAvailable =
+        connection.available.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null,
+        )
+
     val themeMode: StateFlow<AppThemeMode> =
         themeStore.themeFlow.stateIn(
             scope = viewModelScope,
@@ -34,8 +42,12 @@ constructor(
     }
 
     suspend fun observeAccountWhileVisible() {
-        account.session.collectLatest { mode ->
-            if (mode == com.example.film_app_mobile.data.session.SessionMode.Server) {
+        internetAvailable.collectLatest { connected ->
+            if (connected != true) return@collectLatest
+            account.restore()
+            account.session.collectLatest { mode ->
+                if (mode != com.example.film_app_mobile.data.session.SessionMode.Server)
+                    return@collectLatest
                 while (true) {
                     try {
                         profiles.fresh()
@@ -46,9 +58,5 @@ constructor(
                 }
             }
         }
-    }
-
-    fun setTheme(mode: AppThemeMode) {
-        viewModelScope.launch { themeStore.saveTheme(mode) }
     }
 }

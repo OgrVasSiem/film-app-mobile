@@ -20,7 +20,6 @@ import com.example.film_app_mobile.core.dataStore.AppThemeMode
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.data.session.AccountSession
 import com.example.film_app_mobile.data.session.SessionMode
-import com.example.film_app_mobile.data.sync.DecisionSync
 import com.example.film_app_mobile.navigation.MovieApp
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -31,15 +30,11 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     @Inject lateinit var account: AccountSession
 
-    @Inject lateinit var sync: DecisionSync
-
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        viewModel.restore()
-        sync.scheduleSync()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.observeAccountWhileVisible() }
         }
@@ -66,23 +61,31 @@ class MainActivity : ComponentActivity() {
                         isAppearanceLightNavigationBars = !isDark
                     }
                 }
-                when (account.session.collectAsStateWithLifecycle().value) {
-                    SessionMode.Restoring -> com.example.film_app_mobile.components.InitialLoading()
-                    SessionMode.Retry ->
-                        androidx.compose.foundation.layout.Box(
-                            androidx.compose.ui.Modifier.fillMaxSize().safeDrawingPadding(),
-                            contentAlignment = androidx.compose.ui.Alignment.Center,
-                        ) {
-                            com.example.film_app_mobile.core.designsystem.component.Action(
-                                getString(R.string.connection_error) +
-                                    " · " +
-                                    getString(R.string.retry),
-                                true,
-                                viewModel::restore,
-                            )
+                val connected by viewModel.internetAvailable.collectAsStateWithLifecycle()
+                val session by account.session.collectAsStateWithLifecycle()
+                when (connected) {
+                    false -> com.example.film_app_mobile.components.OfflineBanner()
+                    null -> com.example.film_app_mobile.components.InitialLoading()
+                    true ->
+                        when (session) {
+                            SessionMode.Restoring ->
+                                com.example.film_app_mobile.components.InitialLoading()
+                            SessionMode.Retry ->
+                                androidx.compose.foundation.layout.Box(
+                                    androidx.compose.ui.Modifier.fillMaxSize().safeDrawingPadding(),
+                                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                                ) {
+                                    com.example.film_app_mobile.core.designsystem.component.Action(
+                                        getString(R.string.connection_error) +
+                                            " · " +
+                                            getString(R.string.retry),
+                                        true,
+                                        viewModel::restore,
+                                    )
+                                }
+                            SessionMode.Server -> MovieApp(true)
+                            SessionMode.Guest -> MovieApp(false)
                         }
-                    SessionMode.Server -> MovieApp(true)
-                    SessionMode.Guest -> MovieApp(false)
                 }
             }
         }

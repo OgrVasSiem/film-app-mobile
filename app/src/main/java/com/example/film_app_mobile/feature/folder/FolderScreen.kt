@@ -1,7 +1,7 @@
 package com.example.film_app_mobile.feature.folder
 
-import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -15,27 +15,35 @@ import com.example.film_app_mobile.components.*
 import com.example.film_app_mobile.core.designsystem.component.*
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.core.models.*
-import com.example.film_app_mobile.data.mapper.*
 import com.example.film_app_mobile.feature.folder.components.FolderFilmCard
+import com.example.film_app_mobile.feature.folder.state.FolderState
 import kotlinx.coroutines.flow.drop
 
 @Composable
 internal fun FolderRoute(
     folder: LibraryFolder,
     back: () -> Unit,
-    selection: ContentSelectionViewModel = hiltViewModel(),
+    viewModel: FolderViewModel = hiltViewModel(),
 ) {
-    val selected by selection.selection.collectAsStateWithLifecycle(initialValue = null)
-    selected?.let { type -> key(type) { FolderScreen(type, folder, back) } }
+    val state by viewModel.viewState.collectAsStateWithLifecycle()
+
+    if (state.contentType == null) {
+        InitialLoading()
+    } else {
+        key(state.contentType) {
+            FolderScreen(folder = folder, back = back, viewModel = viewModel, state = state)
+        }
+    }
 }
 
 @Composable
-internal fun FolderScreen(
-    type: ContentType,
+private fun FolderScreen(
     folder: LibraryFolder,
     back: () -> Unit,
-    vm: FolderViewModel = hiltViewModel(key = type.name),
+    viewModel: FolderViewModel,
+    state: FolderState,
 ) {
+    val type = state.contentType ?: return
     val status = folder.name
     val title =
         stringResource(
@@ -45,53 +53,69 @@ internal fun FolderScreen(
                 LibraryFolder.WONT_WATCH -> R.string.archive_title
             }
         )
-    val ui by vm.viewState.collectAsStateWithLifecycle()
-    val busy = vm.request.status.busy
-    LifecycleResumeEffect(vm) {
-        vm.load(type, status)
+    val busy = state.request.busy
+
+    LifecycleResumeEffect(viewModel, type) {
+        viewModel.load(type, status)
         onPauseOrDispose {}
     }
-    LaunchedEffect(vm) { vm.changes.drop(1).collect { vm.load(type, status) } }
-    ui.detail?.let { CatalogDetailSheet(type, it) { vm.dismissDetails() } }
+
+    LaunchedEffect(viewModel, type) {
+        viewModel.changes.drop(1).collect { viewModel.load(type, status) }
+    }
+
+    state.detail?.let { CatalogDetailSheet(type = type, film = it) { viewModel.dismissDetails() } }
+
     Scaffold(
         containerColor = AppTheme.colors.background,
         contentWindowInsets = WindowInsets(0),
-        topBar = {
-            AppTopBar(
-                title,
-                action = {},
-                back = { AppText("‹", Modifier.clickable(onClick = back).padding(12.dp)) },
-            )
-        },
+        topBar = { AppTopBar(title, action = {}, back = back) },
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).padding(horizontal = 12.dp)) {
-            RequestFeedback(vm.request.status)
-            if (vm.request.status.error != null)
-                Link(stringResource(R.string.retry), true, vm.request::retry)
-            ui.undo?.let {
-                Link(stringResource(R.string.undo_choice), !busy) {
-                    vm.choose(type, status, it, null)
+        Column(modifier = Modifier.fillMaxSize().padding(pad).padding(horizontal = 12.dp)) {
+            RequestFeedback(state.request)
+
+            if (state.request.error != null)
+                Link(
+                    label = stringResource(R.string.retry),
+                    enabled = true,
+                    action = viewModel.request::retry,
+                )
+
+            state.undo?.let {
+                Link(label = stringResource(R.string.undo_choice), enabled = !busy) {
+                    viewModel.choose(type = type, status = status, id = it, target = null)
                 }
             }
-            androidx.compose.foundation.lazy.LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(ui.cards.size, key = { ui.cards[it].id }) { index ->
-                    val film = ui.cards[index]
-                    FolderFilmCard(film, type, status, busy, { vm.details(type, film.id) }) { target
-                        ->
-                        vm.choose(type, status, film.id, target)
-                    }
-                    Link(stringResource(R.string.reset_decision), !busy) {
-                        vm.choose(type, status, film.id, null)
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(count = state.cards.size, key = { state.cards[it].id }) { index ->
+                    val film = state.cards[index]
+
+                    FolderFilmCard(
+                        film = film,
+                        type = type,
+                        status = status,
+                        busy = busy,
+                        details = { viewModel.details(type = type, id = film.id) },
+                    ) { target ->
+                        viewModel.choose(
+                            type = type,
+                            status = status,
+                            id = film.id,
+                            target = target,
+                        )
                     }
                 }
-                if (ui.cursor != null)
+
+                if (state.cursor != null)
                     item {
-                        Link(stringResource(R.string.more_items), !busy) { vm.more(type, status) }
+                        Link(label = stringResource(R.string.more_items), enabled = !busy) {
+                            viewModel.more(type = type, status = status)
+                        }
                     }
-                if (ui.cards.isEmpty() && !busy)
-                    item { AppText(stringResource(R.string.empty_list)) }
+
+                if (state.cards.isEmpty() && !busy)
+                    item { AppText(text = stringResource(R.string.empty_list)) }
             }
         }
     }

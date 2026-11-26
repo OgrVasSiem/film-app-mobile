@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.film_app_mobile.components.*
@@ -14,25 +15,20 @@ import com.example.film_app_mobile.core.models.ContentType
 import com.example.film_app_mobile.ui.model.*
 
 @Composable
-internal fun DeckPoster(
-    movie: Film,
-    type: ContentType,
-    defocus: Float = 0f,
-    openDetail: ((Long) -> Unit)? = null,
-) {
+internal fun DeckPoster(movie: Film, type: ContentType, openDetail: ((Long) -> Unit)? = null) {
+
     var details by remember(movie.id) { mutableStateOf(false) }
-    if (details)
-        com.example.film_app_mobile.components.FilmDetailSheet(movie, type) { details = false }
+    if (details) {
+        FilmDetailSheet(film = movie, type = type) { details = false }
+    }
+
     BoxWithConstraints(
         Modifier.fillMaxSize().clickable {
             if (openDetail != null) openDetail(movie.id) else details = true
         }
     ) {
-        Poster(
-            movie.posterUrl,
-            Modifier.fillMaxSize(),
-            androidx.compose.ui.layout.ContentScale.Crop,
-        )
+        Poster(url = movie.posterUrl, modifier = Modifier.fillMaxSize(), scale = ContentScale.Crop)
+
         Column(
             Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()
@@ -50,6 +46,7 @@ internal fun DeckPoster(
                 color = AppTheme.colors.onPoster,
                 maxLines = 1,
             )
+
             AppText(
                 listOf(metadata(movie, type), movie.genres.joinToString())
                     .filter { it.isNotBlank() }
@@ -61,6 +58,7 @@ internal fun DeckPoster(
                 color = AppTheme.colors.onPosterSecondary,
                 maxLines = 1,
             )
+
             AppText(
                 movie.description,
                 style =

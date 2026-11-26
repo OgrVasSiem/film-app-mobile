@@ -64,7 +64,6 @@ kotlin {
 
 dependencies {
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.work.runtime)
     implementation(project(":core:designsystem"))
     implementation(libs.retrofit.core)
     implementation(project(":core:network"))
@@ -103,7 +102,6 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(platform(libs.okhttp.bom))
     androidTestImplementation(libs.okhttp.mockwebserver)
-    androidTestImplementation(libs.androidx.room.runtime)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

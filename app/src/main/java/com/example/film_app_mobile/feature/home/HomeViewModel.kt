@@ -2,11 +2,13 @@ package com.example.film_app_mobile.feature.home
 
 import androidx.compose.runtime.*
 import androidx.lifecycle.*
+import com.example.film_app_mobile.core.dataStore.ContentTypeDataStore
 import com.example.film_app_mobile.core.models.ContentType
 import com.example.film_app_mobile.core.network.dto.*
 import com.example.film_app_mobile.data.repository.ProfileRepository
 import com.example.film_app_mobile.data.repository.SectionRepository
 import com.example.film_app_mobile.feature.home.state.HomeState
+import com.example.film_app_mobile.feature.home.state.PremiumStep
 import com.example.film_app_mobile.presentation.ScreenRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -16,9 +18,15 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 internal class HomeViewModel
 @Inject
-constructor(private val repo: SectionRepository, private val profiles: ProfileRepository) :
-    ViewModel() {
-    val request = ScreenRequest(viewModelScope)
+constructor(
+    private val repo: SectionRepository,
+    private val profiles: ProfileRepository,
+    private val contentTypeStore: ContentTypeDataStore,
+) : ViewModel() {
+
+    fun selectContentType(type: ContentType) {
+        viewModelScope.launch { contentTypeStore.select(type) }
+    }
 
     val changes
         get() = repo.changes
@@ -26,7 +34,24 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
     private val _viewState = MutableStateFlow(HomeState())
     val viewState: StateFlow<HomeState> = _viewState.asStateFlow()
 
+    val request =
+        ScreenRequest(viewModelScope) { status -> _viewState.update { it.copy(request = status) } }
+
     init {
+        viewModelScope.launch {
+            contentTypeStore.selection.collect { type ->
+                if (viewState.value.contentType != type) {
+                    request.reset()
+                    _viewState.update {
+                        HomeState(
+                            contentType = type,
+                            hasPremium = it.hasPremium,
+                            streak = it.streak,
+                        )
+                    }
+                }
+            }
+        }
         viewModelScope.launch {
             profiles.premium.collect { active ->
                 _viewState.update {
@@ -45,12 +70,33 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
     }
 
     fun premiumOffer(visible: Boolean) {
-        _viewState.update { it.copy(showPremiumOffer = visible && it.hasPremium != true) }
+        _viewState.update {
+            it.copy(
+                showPremiumOffer = visible && it.hasPremium != true,
+                premiumStep = PremiumStep.Offer,
+                purchaseLogin = "",
+            )
+        }
     }
 
-    fun togglePeriods() {
-        _viewState.update { it.copy(periodsExpanded = !it.periodsExpanded) }
-    }
+    fun checkPurchase() =
+        request.run {
+            val profile = profiles.fresh()
+            _viewState.update {
+                it.copy(
+                    purchaseLogin = profile.login,
+                    premiumStep =
+                        if (profile.passwordProtected) PremiumStep.Checkout else PremiumStep.Protect,
+                )
+            }
+        }
+
+    fun protectForPurchase(password: String) =
+        request.run {
+            if (profiles.protect(password).passwordProtected) {
+                _viewState.update { it.copy(premiumStep = PremiumStep.Checkout) }
+            }
+        }
 
     private var detail: FilmDto?
         get() = viewState.value.detail
@@ -64,9 +110,7 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
 
     fun details(type: ContentType, id: Long) = request.run { detail = repo.card(type, id) }
 
-    suspend fun preview(type: ContentType, key: String) = repo.preview(type, key)
-
-    private var catalog: CachedCatalog?
+    private var catalog: CatalogDto?
         get() = viewState.value.catalog
         set(value) {
             _viewState.update { it.copy(catalog = value) }
@@ -84,15 +128,37 @@ constructor(private val repo: SectionRepository, private val profiles: ProfileRe
             _viewState.update { it.copy(undo = value) }
         }
 
-    fun load(type: ContentType) = request.run { refresh(type) }
+    fun load(type: ContentType) {
+        if (viewState.value.contentType != type) return
+        request.run { refresh(type) }
+    }
 
     private suspend fun refresh(type: ContentType) {
-        single = repo.cachedPick(type)?.film
-        catalog = repo.cached(type)
         catalog = repo.catalog(type)
-        if (catalog?.catalog?.sections?.any { it.key == "SINGLE" } == true)
-            single = repo.pick(type).film
-        profiles.profile()
+        single =
+            if (catalog?.sections?.any { it.key == "SINGLE" } == true) repo.pick(type).film
+            else null
+        profiles.fresh()
+        loadPreviewPosters(type)
+    }
+
+    private suspend fun loadPreviewPosters(type: ContentType) {
+        val sections = catalog?.sections.orEmpty()
+        val previews =
+            sections
+                .filter {
+                    it.state == "READY" && it.key in setOf("DAY", "WEEK", "MONTH", "FOR_YOU")
+                }
+                .associate { section ->
+                    val posters =
+                        try {
+                            repo.preview(type, section.key)
+                        } catch (_: java.io.IOException) {
+                            viewState.value.previewPosters[section.key].orEmpty()
+                        }
+                    section.key to posters
+                }
+        _viewState.update { it.copy(previewPosters = previews) }
     }
 
     fun choose(type: ContentType, id: Long, target: String?) =

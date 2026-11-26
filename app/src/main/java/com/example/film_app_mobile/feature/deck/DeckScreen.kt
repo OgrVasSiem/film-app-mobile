@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.film_app_mobile.R
 import com.example.film_app_mobile.components.*
@@ -17,54 +19,68 @@ import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.core.models.*
 import com.example.film_app_mobile.data.mapper.*
 import com.example.film_app_mobile.feature.deck.components.DeckCarousel
+import com.example.film_app_mobile.feature.deck.state.DeckState
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.first
 
 @Composable
 internal fun DeckRoute(
     deck: DeckSource,
     back: () -> Unit,
-    selection: ContentSelectionViewModel = hiltViewModel(),
+    viewModel: DeckViewModel = hiltViewModel(),
 ) {
-    val selected by selection.selection.collectAsStateWithLifecycle(initialValue = null)
-    selected?.let { type -> key(type) { DeckScreen(type, deck, back) } }
+    val state by viewModel.viewState.collectAsStateWithLifecycle()
+
+    if (state.contentType == null) {
+        InitialLoading()
+    } else {
+        key(state.contentType) {
+            DeckScreen(deck = deck, back = back, viewModel = viewModel, state = state)
+        }
+    }
 }
 
 @Composable
-internal fun DeckScreen(
-    type: ContentType,
+private fun DeckScreen(
     deck: DeckSource,
     back: () -> Unit,
-    vm: DeckViewModel = hiltViewModel(key = type.name),
+    viewModel: DeckViewModel,
+    state: DeckState,
 ) {
-    val ui by vm.viewState.collectAsStateWithLifecycle()
-    val busy = vm.request.status.busy
-    androidx.lifecycle.compose.LifecycleResumeEffect(vm) {
-        vm.load(type, deck)
+    val type = state.contentType ?: return
+    val busy = state.request.busy
+
+    LifecycleResumeEffect(viewModel, type) {
+        viewModel.load(type, deck)
         onPauseOrDispose {}
     }
-    LaunchedEffect(vm) { vm.changes.drop(1).collect { vm.load(type, deck) } }
-    ui.detail?.let { CatalogDetailSheet(type, it) { vm.dismissDetails() } }
+
+    LaunchedEffect(viewModel, type) {
+        viewModel.changes.drop(1).collect { viewModel.load(type, deck) }
+    }
+
+    state.detail?.let { CatalogDetailSheet(type = type, film = it) { viewModel.dismissDetails() } }
+
     CatalogDeadline(
-        ui.catalog
-            ?.catalog
+        state.catalog
             ?.sections
             ?.firstOrNull { (deck as? DeckSource.Periodic)?.period?.name == it.key }
             ?.nextRefreshAt,
-        { vm.request.status.busy },
+        { state.request.busy },
     ) {
-        vm.load(type, deck)
+        viewModel.load(type = type, deck = deck)
     }
-    val visibleCards = remember(ui.cards) { ui.cards.take(3).map { it.entity(0).ui() } }
-    var downward by remember { mutableFloatStateOf(0f) }
-    var drag by remember { mutableFloatStateOf(0f) }
+
+    val visibleCards = remember(state.cards) { state.cards.take(3).map { it.ui() } }
+    val downward = state.downwardProgress
+    val drag = state.horizontalProgress
     val background =
-        androidx.compose.ui.graphics.lerp(
+        lerp(
             AppTheme.colors.background,
             if (downward > 0f) AppTheme.colors.watched
             else if (drag > 0f) AppTheme.colors.swipeLike else AppTheme.colors.swipeDislike,
             maxOf(downward, kotlin.math.abs(drag)).coerceIn(0f, 1f),
         )
+
     Scaffold(
         containerColor = background,
         contentWindowInsets = WindowInsets(0),
@@ -74,12 +90,8 @@ internal fun DeckScreen(
                     when (deck) {
                         DeckSource.Personal -> stringResource(R.string.home_evening)
                         is DeckSource.Editorial ->
-                            ui.catalog
-                                ?.catalog
-                                ?.packs
-                                ?.find { it.id == deck.packId }
-                                ?.title
-                                .orEmpty()
+                            state.catalog?.packs?.find { it.id == deck.packId }?.title.orEmpty()
+
                         is DeckSource.Periodic ->
                             stringResource(
                                 when (deck.period) {
@@ -92,60 +104,73 @@ internal fun DeckScreen(
                     background = background,
                     subtitle =
                         listOfNotNull(
-                                stringResource(R.string.session_decisions, ui.sessionDecisions),
-                                if (ui.cards.isNotEmpty())
+                                stringResource(R.string.session_decisions, state.sessionDecisions),
+                                if (state.cards.isNotEmpty())
                                     stringResource(
                                         R.string.deck_progress,
-                                        ui.sessionDecisions + 1,
-                                        ui.sessionDecisions + ui.cards.size,
+                                        state.sessionDecisions + 1,
+                                        state.sessionDecisions + state.cards.size,
                                     )
                                 else null,
                             )
                             .joinToString(" · "),
                     action = {
-                        ui.undo?.let { id ->
+                        state.undo?.let { id ->
                             AppText(
                                 stringResource(R.string.undo_choice),
                                 Modifier.clickable(enabled = !busy) {
-                                        vm.choose(type, deck, id, null)
+                                        viewModel.choose(type, deck, id, null)
                                     }
                                     .padding(8.dp),
                             )
                         }
                     },
-                    back = { AppText("‹", Modifier.clickable(onClick = back).padding(12.dp)) },
+                    back = back,
                 )
             }
         },
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad)) {
-            RequestFeedback(vm.request.status)
-            if (vm.request.status.error != null)
-                Link(stringResource(R.string.retry), true, vm.request::retry)
-            if (ui.cards.isNotEmpty()) {
-                val film = ui.cards.first()
-                DeckCarousel(
-                    visibleCards,
-                    busy,
-                    Modifier.fillMaxWidth().weight(1f).testTag("v2-deck"),
-                    type = type,
-                    downwardProgress = { downward = it },
-                    progress = { drag = it },
-                    openDetail = { vm.details(type, it) },
-                ) { f, target, reject ->
-                    vm.choose(type, deck, f.id, target, reject)
-                }
-                if (
-                    ui.cards.size <= 3 &&
-                        ui.cursor != null &&
-                        !busy &&
-                        vm.request.status.error == null
+        Column(modifier = Modifier.fillMaxSize().padding(pad)) {
+            RequestFeedback(state.request)
+
+            if (state.request.error != null)
+                Link(
+                    label = stringResource(R.string.retry),
+                    enabled = true,
+                    action = viewModel.request::retry,
                 )
-                    SideEffect { vm.more(type, deck) }
+
+            if (state.cards.isNotEmpty()) {
+                DeckCarousel(
+                    cards = visibleCards,
+                    busy = busy,
+                    modifier = Modifier.fillMaxWidth().weight(1f).testTag("v2-deck"),
+                    type = type,
+                    downwardProgress = viewModel::downwardProgress,
+                    progress = viewModel::horizontalProgress,
+                    openDetail = { viewModel.details(type, it) },
+                ) { f, target, reject ->
+                    viewModel.choose(
+                        type = type,
+                        deck = deck,
+                        id = f.id,
+                        target = target,
+                        reject = reject,
+                    )
+                }
+
+                if (
+                    state.cards.size <= 3 &&
+                        state.cursor != null &&
+                        !busy &&
+                        state.request.error == null
+                ) {
+                    SideEffect { viewModel.more(type, deck) }
+                }
             } else if (!busy)
                 AppText(
                     stringResource(
-                        when (ui.deckState) {
+                        when (state.deckState) {
                             "NEEDS_SELECTION" -> R.string.need_selection_v2
                             "NEEDS_GENRES" -> R.string.need_genres_v2
                             else -> R.string.empty_list

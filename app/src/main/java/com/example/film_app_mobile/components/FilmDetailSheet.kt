@@ -22,9 +22,10 @@ internal fun FilmDetailSheet(
 ) {
     AppBottomSheet(dismiss) {
         if (!film.posterUrl.isNullOrBlank())
-            Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp))) {
-                MovieArt(film)
+            Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp))) {
+                MovieArt(movie = film)
             }
+
         AppText(film.title, style = AppTheme.typography.title)
         val summary = metadata(film, type)
         if (summary.isNotBlank()) AppText(summary, color = AppTheme.colors.textSecondary)

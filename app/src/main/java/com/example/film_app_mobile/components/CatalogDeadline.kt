@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.first
 
 @Composable
 internal fun CatalogDeadline(deadline: String?, busy: () -> Boolean, reload: () -> Unit) {
+    val latestBusy by rememberUpdatedState(busy)
+    val latestReload by rememberUpdatedState(reload)
     LaunchedEffect(deadline) {
         if (deadline != null) {
             delay(
@@ -15,8 +17,8 @@ internal fun CatalogDeadline(deadline: String?, busy: () -> Boolean, reload: () 
                         .time - System.currentTimeMillis())
                     .coerceAtLeast(1000)
             )
-            snapshotFlow { busy() }.first { !it }
-            reload()
+            snapshotFlow { latestBusy() }.first { !it }
+            latestReload()
         }
     }
 }

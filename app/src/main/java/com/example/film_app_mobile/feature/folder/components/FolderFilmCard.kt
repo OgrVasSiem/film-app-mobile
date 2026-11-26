@@ -28,29 +28,38 @@ internal fun FolderFilmCard(
     choose: (String) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth()
-            .height(if (status == null) 206.dp else 178.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppTheme.colors.surface)
-            .clickable(onClick = details),
+        modifier =
+            Modifier.fillMaxWidth()
+                .height(if (status == null) 206.dp else 178.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(AppTheme.colors.surface)
+                .clickable(onClick = details),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(.35f).background(AppTheme.colors.border)) {
-            Poster(film.posterUrl, Modifier.fillMaxSize(), ContentScale.Crop)
+            Poster(
+                url = film.posterUrl,
+                modifier = Modifier.fillMaxSize(),
+                scale = ContentScale.Crop,
+            )
         }
+
         Column(
             Modifier.weight(1f).padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            RecommendationTitle(film.title)
+            RecommendationTitle(title = film.title)
+
             val duration = film.durationMinutes?.let { stringResource(type.durationLabel, it) }
+
             AppText(
-                listOfNotNull(
-                        film.year?.toString(),
-                        duration,
-                        film.genres.take(2).joinToString().ifBlank { null },
-                    )
-                    .joinToString(" · "),
+                text =
+                    listOfNotNull(
+                            film.year?.toString(),
+                            duration,
+                            film.genres.take(2).joinToString().ifBlank { null },
+                        )
+                        .joinToString(" · "),
                 style = AppTheme.typography.caption,
                 color = AppTheme.colors.textSecondary,
                 maxLines = 1,
@@ -61,9 +70,11 @@ internal fun FolderFilmCard(
                     style = AppTheme.typography.caption,
                 )
             }
-            if (film.description.isNotBlank())
-                AppText(film.description, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            DecisionControls(!busy, exclude = status, decide = choose)
+            if (film.description.isNotBlank()) {
+                AppText(text = film.description, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+
+            DecisionControls(enabled = !busy, exclude = status, decide = choose)
         }
     }
 }

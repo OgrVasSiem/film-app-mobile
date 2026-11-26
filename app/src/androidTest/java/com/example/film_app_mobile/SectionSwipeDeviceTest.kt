@@ -5,19 +5,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
-import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.core.models.*
 import com.example.film_app_mobile.core.models.ContentType
 import com.example.film_app_mobile.core.network.*
 import com.example.film_app_mobile.core.network.api.*
-import com.example.film_app_mobile.core.storage.FilmDatabase
-import com.example.film_app_mobile.data.image.CoverFiles
 import com.example.film_app_mobile.data.repository.*
 import com.example.film_app_mobile.data.session.AccountSession
 import com.example.film_app_mobile.feature.deck.*
 import java.util.UUID
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.*
 import org.junit.Assert.*
@@ -30,23 +28,27 @@ class SectionSwipeDeviceTest {
         Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("liveCatalog") == "true")
         val app = compose.activity
         val stack = NetworkStack(NetworkConfig(BuildConfig.API_BASE_URL, true))
-        val db = Room.inMemoryDatabaseBuilder(app, FilmDatabase::class.java).build()
         val api = stack.retrofit.create(ProfileApi::class.java)
-        val account = AccountSession(app, api, db.profile(), UUID.randomUUID().toString())
+        val account = AccountSession(app, api, UUID.randomUUID().toString())
         val temporary = runBlocking { stack.retrofit.create(AuthApi::class.java).start() }
+        val contentStore = com.example.film_app_mobile.core.dataStore.ContentTypeDataStore(app)
+        val previousType = runBlocking { contentStore.selection.first() }
         try {
-            runBlocking { account.start(temporary) }
-            val repo = SectionRepository(account, stack, db.library(), CoverFiles(app))
-            val vm = DeckViewModel(repo, ProfileRepository(account, api, db.profile()))
+            runBlocking {
+                account.start(temporary)
+                contentStore.select(ContentType.FILM)
+            }
+            val repo = SectionRepository(account, stack)
+            val vm = DeckViewModel(repo, ProfileRepository(account, api), contentStore)
             val deck = runBlocking {
                 val pack =
-                    repo.catalog(ContentType.FILM).catalog.packs.first {
+                    repo.catalog(ContentType.FILM).packs.first {
                         !it.locked && it.availableCount > 0
                     }
                 DeckSource.Editorial(pack.id)
             }
             compose.activityRule.scenario.onActivity { activity ->
-                activity.setContent { AppTheme { DeckScreen(ContentType.FILM, deck, {}, vm) } }
+                activity.setContent { AppTheme { DeckRoute(deck, {}, vm) } }
             }
             compose.waitUntil(15000) {
                 vm.viewState.value.cards.isNotEmpty() && !vm.request.status.busy
@@ -62,7 +64,7 @@ class SectionSwipeDeviceTest {
                 )
                 val catalog = repo.catalog(ContentType.FILM)
                 for (section in
-                    catalog.catalog.sections.filter {
+                    catalog.sections.filter {
                         it.key in listOf("DAY", "WEEK", "MONTH") && it.state == "READY"
                     }) {
                     var page = repo.page(ContentType.FILM, "decks/" + section.key, null, null)
@@ -94,9 +96,9 @@ class SectionSwipeDeviceTest {
                 }
             )
         } finally {
+            runBlocking { contentStore.select(previousType) }
             runBlocking { api.delete("Bearer " + temporary.token, mapOf("confirmed" to true)) }
             runBlocking { account.endSession() }
-            db.close()
         }
     }
 }

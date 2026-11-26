@@ -133,10 +133,11 @@
     <string name="kp_rating">Кинопоиск · %1$.1f</string>
     <string name="kp_votes">Голосов: %1$d</string>
     <string name="episode_minutes">Эпизод · %1$d мин</string>
-    <string name="home_daily">Ежедневные подборки</string>
+    <string name="home_daily">Рекомендации для вас </string>
     <string name="home_all">Все →</string>
     <string name="home_fold">Свернуть</string>
     <string name="home_evening">Персональная подборка на вечер</string>
     <string name="home_pick">Рекомендация дня</string>
     <string name="home_count">Карточек: %1$d</string>
+    <string name="no_internet">У вас не работает интернет</string>
 </resources>

@@ -2,6 +2,7 @@ package com.example.film_app_mobile
 
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.example.film_app_mobile.components.FilmDetailSheet
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.feature.deck.components.DeckCarousel
 import com.example.film_app_mobile.feature.library.components.LibraryPreview
@@ -25,7 +27,12 @@ class NavigationTest {
     fun backFromLibraryReturnsToPacks() {
         val activity = compose.activity
         compose.runOnUiThread { activity.setContent { AppTheme { MovieApp(signedIn = true) } } }
-        compose.onNodeWithText(activity.getString(R.string.series_v2)).performClick()
+        val series = activity.getString(R.string.series_v2)
+        compose.waitUntil(10_000) {
+            runCatching { compose.onAllNodesWithText(series).fetchSemanticsNodes().isNotEmpty() }
+                .getOrDefault(false)
+        }
+        compose.onNodeWithText(series).performClick()
         compose.onNodeWithText(activity.getString(R.string.library_title)).performClick()
         compose.onNodeWithText(activity.getString(R.string.series_v2)).assertIsSelected()
         compose.onNodeWithText(activity.getString(R.string.films_v2)).performClick()
@@ -89,13 +96,14 @@ class NavigationTest {
         compose.runOnUiThread {
             activity.setContent {
                 AppTheme {
+                    var detail by remember { mutableStateOf<Film?>(null) }
                     Column {
                         LibraryPreview(
                             LibraryState(sections = mapOf("WILL_WATCH" to listOf(film))),
-                            false,
-                            null,
-                            {},
+                            openList = {},
+                            openDetail = { detail = film.takeIf { movie -> movie.id == it } },
                         )
+                        detail?.let { FilmDetailSheet(it) { detail = null } }
                     }
                 }
             }

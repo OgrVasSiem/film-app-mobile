@@ -15,7 +15,12 @@ data class CatalogDto(
 
 @Serializable data class CoverDto(val mimeType: String, val sha256: String, val base64: String)
 
-@Serializable data class FilmPageDto(val items: List<FilmDto>, val nextCursor: String?, val state:String?=null)
+@Serializable
+data class FilmPageDto(
+    val items: List<FilmDto>,
+    val nextCursor: String?,
+    val state: String? = null,
+)
 
 @Serializable data class RecommendationSummary(val deckState: String, val availableCount: Long)
 
@@ -32,11 +37,4 @@ data class CatalogSection(
     val availableCount: Long,
     val nextRefreshAt: String? = null,
     val periodStart: String? = null,
-)
-
-@Serializable
-data class CachedCatalog(
-    val catalog: CatalogDto,
-    val hashes: Map<String, String>,
-    val etag: String?,
 )

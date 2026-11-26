@@ -14,9 +14,17 @@ import kotlinx.coroutines.flow.*
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(private val authRepository: AuthRepository) : ViewModel() {
-    val request = ScreenRequest(viewModelScope)
     private val _viewState = MutableStateFlow(AuthState())
     val viewState: StateFlow<AuthState> = _viewState.asStateFlow()
+    val request =
+        ScreenRequest(viewModelScope) { status -> _viewState.update { it.copy(request = status) } }
+
+    fun showLogin(visible: Boolean) {
+        request.clearError()
+        _viewState.update {
+            it.copy(existingAccount = visible, password = if (visible) it.password else "")
+        }
+    }
 
     fun login(value: String) {
         request.clearError()

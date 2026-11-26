@@ -13,4 +13,5 @@ data class PackDto(
     val locked: Boolean,
     val coverUrl: String? = null,
     val isCompleted: Boolean = false,
+    val availableCount: Long = 0,
 )

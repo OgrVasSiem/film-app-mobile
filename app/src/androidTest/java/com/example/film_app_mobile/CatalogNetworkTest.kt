@@ -44,7 +44,7 @@ class CatalogNetworkTest {
             fun sync() = DecisionSync(account,library,db.library()) {}
             fun repo() = PacksRepository(account,api,db.pack(),db.deck(),sync(),CoverFiles(context))
             var packs = repo()
-            suspend fun login(id: Long) = account.start(SessionDto("user-"+id,ProfileDto(id,"tester",false,true)))
+            suspend fun login(id: Long) = account.start(SessionDto("user-"+id,ProfileDto(id,"tester",false,true, false, 0)))
             fun image(color: Int): ByteArray {
                 val bitmap = Bitmap.createBitmap(3,3,Bitmap.Config.ARGB_8888)
                 bitmap.eraseColor(color)

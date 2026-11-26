@@ -4,34 +4,35 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.*
 import androidx.navigation3.ui.NavDisplay
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
 import com.example.film_app_mobile.feature.auth.AuthRoute
 import com.example.film_app_mobile.feature.deck.DeckRoute
+import com.example.film_app_mobile.feature.folder.FolderRoute
+import com.example.film_app_mobile.feature.home.HomeScreen
 import com.example.film_app_mobile.feature.library.LibraryRoute
-import com.example.film_app_mobile.feature.packs.PacksRoute
 import com.example.film_app_mobile.feature.profile.ProfileRoute
 
 @Composable
-internal fun MovieApp(signedIn: Boolean, dark: Boolean, changeTheme: (Boolean) -> Unit) =
+internal fun MovieApp(signedIn: Boolean) =
     key(signedIn) {
-        val stack = rememberNavBackStack(if (signedIn) Page.Packs else Page.Auth)
+        val stack = rememberNavBackStack(if (signedIn) Page.Home else Page.Auth)
         val current = stack.last()
         fun show(page: Page) {
             if (stack.last() == page) return
-            if (stack.size > 1) stack.removeAt(stack.lastIndex)
-            if (page != Page.Packs) stack.add(page)
+            while (stack.size > 1) stack.removeAt(stack.lastIndex)
+            if (page != Page.Home) stack.add(page)
         }
 
         Column(
             Modifier.fillMaxSize()
-                .background(AppTheme.colors.background)
+                .background(AppTheme.colors.surface)
                 .windowInsetsPadding(
                     WindowInsets.safeDrawing.only(
-                        WindowInsetsSides.Horizontal + WindowInsetsSides.Top
+                        if (current is Page.Deck) WindowInsetsSides.Horizontal
+                        else WindowInsetsSides.Horizontal + WindowInsetsSides.Top
                     )
                 )
                 .imePadding()
@@ -49,20 +50,19 @@ internal fun MovieApp(signedIn: Boolean, dark: Boolean, changeTheme: (Boolean) -
                 entryProvider =
                     entryProvider {
                         entry<Page.Auth> { AuthRoute() }
-                        entry<Page.Packs> {
-                            PacksRoute(hiltViewModel()) { pack -> show(Page.Deck(pack)) }
+                        entry<Page.Home> {
+                            HomeScreen(open = { deck -> stack.add(Page.Deck(deck)) })
                         }
-                        entry<Page.Profile> { ProfileRoute(dark, changeTheme) }
-                        entry<Page.Library> { LibraryRoute(packs = { show(Page.Packs) }) }
-                        entry<Page.Deck> {
-                            DeckRoute(
-                                it.pack,
-                                library = { show(Page.Library) },
-                                packs = { show(Page.Packs) },
-                            )
+                        entry<Page.Library> {
+                            LibraryRoute(open = { folder -> stack.add(Page.Folder(folder)) })
                         }
+                        entry<Page.Deck> { DeckRoute(it.deck, { stack.removeAt(stack.lastIndex) }) }
+                        entry<Page.Folder> {
+                            FolderRoute(it.folder, { stack.removeAt(stack.lastIndex) })
+                        }
+                        entry<Page.Profile> { ProfileRoute() }
                     },
             )
-            if (signedIn) BottomAppBar(current, ::show)
+            if (signedIn && current !is Page.Deck) BottomAppBar(current, ::show)
         }
     }

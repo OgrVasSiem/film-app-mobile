@@ -13,6 +13,9 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 internal object NetworkModule {
     @Provides
+    fun personal(stack: NetworkStack): PersonalApi = stack.retrofit.create(PersonalApi::class.java)
+
+    @Provides
     @Singleton
     fun provideAuthApi(stack: NetworkStack): AuthApi = stack.retrofit.create(AuthApi::class.java)
 

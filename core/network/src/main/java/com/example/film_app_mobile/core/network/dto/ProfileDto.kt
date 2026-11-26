@@ -10,4 +10,8 @@ data class ProfileDto(
     val login: String,
     val premium: Boolean,
     val adsEnabled: Boolean,
+    val passwordProtected: Boolean,
+    val streakDays: Int,
 )
+
+@Serializable data class LoginAvailability(val login: String, val available: Boolean)

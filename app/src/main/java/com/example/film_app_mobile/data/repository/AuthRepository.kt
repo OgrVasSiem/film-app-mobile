@@ -12,17 +12,28 @@ constructor(
     private val account: AccountSession,
     private val authApi: AuthApi,
     private val sync: DecisionSync,
+    private val sections: SectionRepository? = null,
 ) {
-    suspend fun signIn(login: String, password: String, register: Boolean) =
+    suspend fun signIn(login: String, password: String) =
         account.operation {
             val credentials = CredentialsDto(login.trim(), password)
-            val result = if (register) authApi.register(credentials) else authApi.login(credentials)
+            val result = authApi.login(credentials)
             start(result)
             sync.scheduleSync()
         }
 
+    suspend fun begin() =
+        account.operation {
+            if (!signedIn) {
+                start(authApi.start(), newAccount = true)
+                sync.scheduleSync()
+            }
+        }
+
     suspend fun logout() =
         account.operation {
+            requireProtectedProfile()
+            sections?.flush(owner(), auth)
             sync.flush(owner(), auth)
             authApi.logout(auth)
             endSession()

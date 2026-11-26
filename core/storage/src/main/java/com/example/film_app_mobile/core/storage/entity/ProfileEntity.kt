@@ -9,4 +9,6 @@ data class ProfileEntity(
     val login: String,
     val premium: Boolean,
     val adsEnabled: Boolean,
+    @androidx.room.ColumnInfo(defaultValue = "0") val passwordProtected: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "0") val streakDays: Int = 0,
 )

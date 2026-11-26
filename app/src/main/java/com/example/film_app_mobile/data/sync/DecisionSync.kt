@@ -7,9 +7,7 @@ import com.example.film_app_mobile.data.session.AccountSession
 import javax.inject.Inject
 import retrofit2.HttpException
 
-class DecisionSync
-@Inject
-constructor(
+class DecisionSync @Inject constructor(
     private val account: AccountSession,
     private val libraryApi: LibraryApi,
     private val dao: LibraryDao,

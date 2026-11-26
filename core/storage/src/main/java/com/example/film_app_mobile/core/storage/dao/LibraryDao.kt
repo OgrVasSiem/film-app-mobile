@@ -5,6 +5,43 @@ import com.example.film_app_mobile.core.storage.entity.*
 
 @Dao
 abstract class LibraryDao : FilmCache() {
+    @Query("SELECT body FROM personal_cache WHERE owner=:owner AND scope=:scope")
+    abstract suspend fun body(owner: Long, scope: String): String?
+
+    @Query(
+        "DELETE FROM personal_cache WHERE owner=:owner AND substr(scope,1,length(:prefix))=:prefix"
+    )
+    abstract suspend fun clearSection(owner: Long, prefix: String)
+
+    @Query(
+        "SELECT * FROM personal_cache WHERE owner=:owner AND substr(scope,1,length(:prefix))=:prefix ORDER BY rowid"
+    )
+    abstract suspend fun entries(owner: Long, prefix: String): List<PersonalCache>
+
+    @Query("DELETE FROM personal_cache WHERE owner=:owner AND scope=:scope")
+    abstract suspend fun remove(owner: Long, scope: String)
+
+    @Upsert abstract suspend fun saveAll(rows: List<PersonalCache>)
+
+    @Transaction
+    open suspend fun replaceOffline(owner: Long, prefix: String, rows: List<PersonalCache>) {
+        clearSection(owner, prefix + "snapshot/")
+        clearSection(owner, prefix + "local/")
+        saveAll(rows)
+    }
+
+    @Upsert abstract suspend fun save(value: PersonalCache)
+
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM decisions WHERE owner=:owner AND film=:film AND status IS NOT NULL)"
+    )
+    abstract suspend fun decided(owner: Long, film: Long): Boolean
+
+    @Query(
+        "DELETE FROM personal_cache WHERE owner=:owner AND scope NOT LIKE 'offline/%' AND scope NOT LIKE '../v2/%'"
+    )
+    abstract suspend fun clearPersonal(owner: Long)
+
     @Query(
         "SELECT f.* FROM decisions d JOIN films f ON f.owner=d.owner AND f.id=d.film WHERE d.owner=:owner AND d.status=:status ORDER BY d.updated DESC, f.id"
     )
@@ -48,6 +85,7 @@ abstract class LibraryDao : FilmCache() {
         if (decision.status == null) forget(decision.owner, decision.film)
         else putDecision(decision.copy(pending = false))
         if (decision.status == null) resetPages(decision.owner)
+        clearPersonal(decision.owner)
         invalidate(decision.owner)
     }
 }

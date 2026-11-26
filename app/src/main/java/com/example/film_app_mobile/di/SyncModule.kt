@@ -4,15 +4,18 @@ import android.content.Context
 import androidx.work.*
 import com.example.film_app_mobile.data.sync.DecisionSyncWorker
 import com.example.film_app_mobile.data.sync.SyncScheduler
+import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 
-@dagger.Module
+@Module
 @InstallIn(SingletonComponent::class)
 object SyncModule {
-    @dagger.Provides
+    @Provides
     fun scheduler(
-        @dagger.hilt.android.qualifiers.ApplicationContext context: Context
+        @ApplicationContext context: Context
     ): SyncScheduler = SyncScheduler {
         val work =
             OneTimeWorkRequestBuilder<DecisionSyncWorker>()

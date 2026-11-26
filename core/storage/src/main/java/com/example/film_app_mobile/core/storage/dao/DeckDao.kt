@@ -19,7 +19,7 @@ abstract class DeckDao : FilmCache() {
     protected abstract suspend fun clearDeck(owner: Long, pack: Long)
 
     @Query(
-        "SELECT f.* FROM films f JOIN pack_films p ON p.owner=f.owner AND p.film=f.id JOIN packs k ON k.owner=p.owner AND k.id=p.pack LEFT JOIN decisions d ON d.owner=f.owner AND d.film=f.id WHERE p.owner=:owner AND p.pack=:pack AND NOT k.locked AND d.status IS NULL ORDER BY p.position, f.id"
+        "SELECT f.* FROM films f JOIN pack_films p ON p.owner=f.owner AND p.film=f.id LEFT JOIN packs k ON k.owner=p.owner AND k.id=p.pack LEFT JOIN decisions d ON d.owner=f.owner AND d.film=f.id WHERE p.owner=:owner AND p.pack=:pack AND (p.pack=-1 OR NOT k.locked) AND d.status IS NULL ORDER BY p.position, f.id"
     )
     abstract suspend fun deck(owner: Long, pack: Long): List<FilmEntity>
 

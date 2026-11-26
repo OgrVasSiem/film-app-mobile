@@ -2,83 +2,156 @@ package com.example.film_app_mobile.feature.deck
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.film_app_mobile.R
 import com.example.film_app_mobile.components.*
-import com.example.film_app_mobile.core.designsystem.component.Action
-import com.example.film_app_mobile.core.designsystem.component.AppText
+import com.example.film_app_mobile.core.designsystem.component.*
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
-import com.example.film_app_mobile.feature.completion.*
-import com.example.film_app_mobile.ui.model.*
-import com.example.film_app_mobile.ui.model.Pack
-import kotlinx.coroutines.*
+import com.example.film_app_mobile.core.models.*
+import com.example.film_app_mobile.data.mapper.*
+import com.example.film_app_mobile.feature.deck.components.DeckCarousel
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 
 @Composable
-internal fun ColumnScope.DeckScreen(
-    state: DeckState,
-    busy: Boolean,
-    choose: (Film, String, () -> Unit) -> Unit,
+internal fun DeckRoute(
+    deck: DeckSource,
+    back: () -> Unit,
+    selection: ContentSelectionViewModel = hiltViewModel(),
 ) {
-    val c = AppTheme.colors
-    val cards = state.cards
-    val total = state.total
-    if (cards.isEmpty()) return
-    AppText(
-        stringResource(R.string.deck_progress, total - cards.size + 1, total),
-        style = AppTheme.typography.caption,
-        color = c.accent,
-    )
-    Canvas(Modifier.fillMaxWidth().height(3.dp)) {
-        val count = total.coerceAtLeast(cards.size)
-        drawRect(c.border)
-        drawRect(c.accent, size = size.copy(width = size.width * (count - cards.size + 1) / count))
-    }
-    DeckCarousel(cards, busy, Modifier.fillMaxWidth().weight(1f), choose)
+    val selected by selection.selection.collectAsStateWithLifecycle(initialValue = null)
+    selected?.let { type -> key(type) { DeckScreen(type, deck, back) } }
 }
 
 @Composable
-internal fun DeckRoute(pack: Pack, library: () -> Unit, packs: () -> Unit) {
-    val vm =
-        hiltViewModel<DeckViewModel, DeckViewModel.Factory>(creationCallback = { it.create(pack) })
-    val state = vm.state
-    val request = vm.request.status
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+internal fun DeckScreen(
+    type: ContentType,
+    deck: DeckSource,
+    back: () -> Unit,
+    vm: DeckViewModel = hiltViewModel(key = type.name),
+) {
+    val ui by vm.viewState.collectAsStateWithLifecycle()
+    val busy = vm.request.status.busy
+    androidx.lifecycle.compose.LifecycleResumeEffect(vm) {
+        vm.load(type, deck)
+        onPauseOrDispose {}
+    }
+    LaunchedEffect(vm) { vm.changes.drop(1).collect { vm.load(type, deck) } }
+    ui.detail?.let { CatalogDetailSheet(type, it) { vm.dismissDetails() } }
+    CatalogDeadline(
+        ui.catalog
+            ?.catalog
+            ?.sections
+            ?.firstOrNull { (deck as? DeckSource.Periodic)?.period?.name == it.key }
+            ?.nextRefreshAt,
+        { vm.request.status.busy },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val back = stringResource(R.string.back_to_packs)
-            Box(
-                Modifier.size(48.dp).clickable(onClick = packs).semantics {
-                    contentDescription = back
-                },
-                contentAlignment = Alignment.Center,
-            ) {
-                val tint = AppTheme.colors.textPrimary
-                Canvas(Modifier.size(24.dp)) {
-                    val left = androidx.compose.ui.geometry.Offset(size.width * .18f, center.y)
-                    drawLine(tint, left, center.copy(x = size.width * .85f), 2.dp.toPx())
-                    drawLine(tint, left, center.copy(y = size.height * .18f), 2.dp.toPx())
-                    drawLine(tint, left, center.copy(y = size.height * .82f), 2.dp.toPx())
-                }
+        vm.load(type, deck)
+    }
+    val visibleCards = remember(ui.cards) { ui.cards.take(3).map { it.entity(0).ui() } }
+    var downward by remember { mutableFloatStateOf(0f) }
+    var drag by remember { mutableFloatStateOf(0f) }
+    val background =
+        androidx.compose.ui.graphics.lerp(
+            AppTheme.colors.background,
+            if (downward > 0f) AppTheme.colors.watched
+            else if (drag > 0f) AppTheme.colors.swipeLike else AppTheme.colors.swipeDislike,
+            maxOf(downward, kotlin.math.abs(drag)).coerceIn(0f, 1f),
+        )
+    Scaffold(
+        containerColor = background,
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            Box(Modifier.background(background).statusBarsPadding()) {
+                AppTopBar(
+                    when (deck) {
+                        DeckSource.Personal -> stringResource(R.string.home_evening)
+                        is DeckSource.Editorial ->
+                            ui.catalog
+                                ?.catalog
+                                ?.packs
+                                ?.find { it.id == deck.packId }
+                                ?.title
+                                .orEmpty()
+                        is DeckSource.Periodic ->
+                            stringResource(
+                                when (deck.period) {
+                                    Period.DAY -> R.string.day_v2
+                                    Period.WEEK -> R.string.week_v2
+                                    Period.MONTH -> R.string.month_v2
+                                }
+                            )
+                    },
+                    background = background,
+                    subtitle =
+                        listOfNotNull(
+                                stringResource(R.string.session_decisions, ui.sessionDecisions),
+                                if (ui.cards.isNotEmpty())
+                                    stringResource(
+                                        R.string.deck_progress,
+                                        ui.sessionDecisions + 1,
+                                        ui.sessionDecisions + ui.cards.size,
+                                    )
+                                else null,
+                            )
+                            .joinToString(" · "),
+                    action = {
+                        ui.undo?.let { id ->
+                            AppText(
+                                stringResource(R.string.undo_choice),
+                                Modifier.clickable(enabled = !busy) {
+                                        vm.choose(type, deck, id, null)
+                                    }
+                                    .padding(8.dp),
+                            )
+                        }
+                    },
+                    back = { AppText("‹", Modifier.clickable(onClick = back).padding(12.dp)) },
+                )
             }
-            AppText(pack.title, style = AppTheme.typography.title, maxLines = 2)
-        }
-        if (request.busy && state.cards.isEmpty()) AppText(stringResource(R.string.loading))
-        request.error?.let { AppText(stringResource(it)) }
-        Link(stringResource(R.string.refresh_deck), !request.busy, vm::restart)
-        if (request.error != null) Action(stringResource(R.string.retry), action = vm::retry)
-        if (state.loaded && state.nextCursor == null && state.cards.isEmpty()) {
-            CompletionScreen(CompletionState(state.saved, state.skipped), library, packs)
-        } else {
-            DeckScreen(state, request.busy, vm::choose)
+        },
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad)) {
+            RequestFeedback(vm.request.status)
+            if (vm.request.status.error != null)
+                Link(stringResource(R.string.retry), true, vm.request::retry)
+            if (ui.cards.isNotEmpty()) {
+                val film = ui.cards.first()
+                DeckCarousel(
+                    visibleCards,
+                    busy,
+                    Modifier.fillMaxWidth().weight(1f).testTag("v2-deck"),
+                    type = type,
+                    downwardProgress = { downward = it },
+                    progress = { drag = it },
+                    openDetail = { vm.details(type, it) },
+                ) { f, target, reject ->
+                    vm.choose(type, deck, f.id, target, reject)
+                }
+                if (
+                    ui.cards.size <= 3 &&
+                        ui.cursor != null &&
+                        !busy &&
+                        vm.request.status.error == null
+                )
+                    SideEffect { vm.more(type, deck) }
+            } else if (!busy)
+                AppText(
+                    stringResource(
+                        when (ui.deckState) {
+                            "NEEDS_SELECTION" -> R.string.need_selection_v2
+                            "NEEDS_GENRES" -> R.string.need_genres_v2
+                            else -> R.string.empty_list
+                        }
+                    )
+                )
         }
     }
 }

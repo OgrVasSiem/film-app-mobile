@@ -1,5 +1,6 @@
 package com.example.film_app_mobile.data.image
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Base64
@@ -21,6 +22,7 @@ class CoverFiles @Inject constructor(@ApplicationContext context: Context) {
         hash.matches(Regex("[a-f0-9]{64}")) && file.isFile && digest(file.readBytes()) == hash
     }
 
+    @SuppressLint("SuspiciousIndentation")
     suspend fun save(cover: CoverDto): String = withContext(Dispatchers.IO) {
         val hash = cover.sha256.lowercase()
         require(hash.matches(Regex("[a-f0-9]{64}")))

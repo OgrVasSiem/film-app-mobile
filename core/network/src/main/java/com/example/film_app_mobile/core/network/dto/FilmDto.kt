@@ -15,4 +15,9 @@ data class FilmDto(
     val actors: List<String>,
     val durationMinutes: Int?,
     val genres: List<String>,
+    val rating: RatingDto? = null,
+    val premiereDate: String? = null,
+    val contentType: String = "films",
 )
+
+@Serializable data class RatingDto(val source: String, val value: Double, val votes: Long? = null)

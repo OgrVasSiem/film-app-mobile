@@ -3,7 +3,10 @@ package com.example.film_app_mobile.data.cache
 import java.io.IOException
 import retrofit2.HttpException
 
-internal suspend fun refresh(hasCache: suspend () -> Boolean, fetch: suspend () -> Unit) {
+internal suspend fun refresh(
+    hasCache: suspend () -> Boolean,
+    fetch: suspend () -> Unit
+) {
     try {
         fetch()
     } catch (e: IOException) {

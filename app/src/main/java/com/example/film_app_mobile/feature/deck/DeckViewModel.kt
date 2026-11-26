@@ -1,98 +1,136 @@
 package com.example.film_app_mobile.feature.deck
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.example.film_app_mobile.data.repository.LibraryRepository
-import com.example.film_app_mobile.data.repository.PacksRepository
+import androidx.compose.runtime.*
+import androidx.lifecycle.*
+import com.example.film_app_mobile.core.models.*
+import com.example.film_app_mobile.core.network.dto.*
+import com.example.film_app_mobile.data.repository.ProfileRepository
+import com.example.film_app_mobile.data.repository.SectionRepository
+import com.example.film_app_mobile.feature.deck.state.DeckState
 import com.example.film_app_mobile.presentation.ScreenRequest
-import com.example.film_app_mobile.ui.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.flow.*
 
-@HiltViewModel(assistedFactory = DeckViewModel.Factory::class)
-class DeckViewModel
-@dagger.assisted.AssistedInject
-constructor(
-    private val packsRepository: PacksRepository,
-    private val libraryRepository: LibraryRepository,
-    @dagger.assisted.Assisted private val pack: Pack,
-) : ViewModel() {
+@HiltViewModel
+internal class DeckViewModel
+@Inject
+constructor(private val repo: SectionRepository, private val profiles: ProfileRepository) :
+    ViewModel() {
     val request = ScreenRequest(viewModelScope)
-    var state by mutableStateOf(DeckState())
-        private set
+    val changes
+        get() = repo.changes
 
-    @dagger.assisted.AssistedFactory
-    interface Factory {
-        fun create(pack: Pack): DeckViewModel
-    }
-
-    init {
-        load()
-    }
-
-    private fun display(deck: com.example.film_app_mobile.data.repository.LocalDeck, preserveOrder: Boolean) {
-        val byId = deck.cards.associateBy { it.id }
-        val cards = if (preserveOrder) (state.cards.mapNotNull { byId[it.id] } + deck.cards).distinctBy { it.id } else deck.cards
-        val seen = if (preserveOrder) state.total - state.cards.size else 0
-        state = state.copy(cards = cards, total = seen + cards.size, nextCursor = deck.next, loaded = true)
-    }
-
-    fun load() = request.run {
-        val cached = packsRepository.localDeck(pack.id)
-        display(cached ?: packsRepository.page(pack.id), false)
-        fill()
-    }
-
-    private var restarting = false
-
-    fun restart() = request.run {
-        restarting = true
-        display(packsRepository.page(pack.id, restart = true), false)
-        restarting = false
-        fill()
-    }
-
-    fun retry() = request.run {
-        if (restarting || !state.loaded) {
-            display(packsRepository.page(pack.id, restart = restarting), false)
-            restarting = false
+    private val _viewState = MutableStateFlow(DeckState())
+    val viewState: StateFlow<DeckState> = _viewState.asStateFlow()
+    private var detail: FilmDto?
+        get() = viewState.value.detail
+        set(value) {
+            _viewState.update { it.copy(detail = value) }
         }
-        fill()
+
+    fun dismissDetails() {
+        detail = null
     }
 
-    private suspend fun fill() {
-        while (state.cards.size <= 3) {
-            val cursor = state.nextCursor ?: break
-            try { display(packsRepository.page(pack.id, cursor), true) } catch (e: com.example.film_app_mobile.data.error.RequestFailure) {
-                if (e.messageId == com.example.film_app_mobile.R.string.premium_required) state = DeckState()
+    fun details(type: ContentType, id: Long) = request.run { detail = repo.card(type, id) }
+
+    private var cards: List<FilmDto>
+        get() = viewState.value.cards
+        set(value) {
+            _viewState.update { it.copy(cards = value) }
+        }
+
+    private var cursor: String?
+        get() = viewState.value.cursor
+        set(value) {
+            _viewState.update { it.copy(cursor = value) }
+        }
+
+    private var sessionDecisions: Int
+        get() = viewState.value.sessionDecisions
+        set(value) {
+            _viewState.update { it.copy(sessionDecisions = value) }
+        }
+
+    private var undo: Long?
+        get() = viewState.value.undo
+        set(value) {
+            _viewState.update { it.copy(undo = value) }
+        }
+
+    private var catalog: CachedCatalog?
+        get() = viewState.value.catalog
+        set(value) {
+            _viewState.update { it.copy(catalog = value) }
+        }
+
+    private var deckState: String?
+        get() = viewState.value.deckState
+        set(value) {
+            _viewState.update { it.copy(deckState = value) }
+        }
+
+    fun load(type: ContentType, deck: DeckSource) = request.run { refresh(type, deck) }
+
+    private suspend fun refresh(type: ContentType, deck: DeckSource) {
+        repo.cachedPage(type, repo.deckPath(deck), null)?.let {
+            cards = it.items
+            cursor = it.nextCursor
+        }
+        if (deck is DeckSource.Editorial) catalog = repo.cached(type) ?: repo.catalog(type)
+        if (deck is DeckSource.Periodic) catalog = repo.catalog(type)
+        page(type, deck, null)
+    }
+
+    fun more(type: ContentType, deck: DeckSource) =
+        request.run { cursor?.let { page(type, deck, it) } }
+
+    private suspend fun page(type: ContentType, deck: DeckSource, after: String?) {
+        val result =
+            try {
+                repo.page(type, repo.deckPath(deck), null, after)
+            } catch (e: com.example.film_app_mobile.data.error.RequestFailure) {
+                if (e.messageId == com.example.film_app_mobile.R.string.premium_required) {
+                    cards = emptyList()
+                    cursor = null
+                    profiles.fresh()
+                    repo.catalog(type)
+                }
                 throw e
             }
-        }
+        cards = result.items
+        cursor = result.nextCursor
+        deckState = result.state
     }
 
-    fun choose(movie: Film, folder: String, onRejected: () -> Unit) =
+    fun choose(
+        type: ContentType,
+        deck: DeckSource,
+        id: Long,
+        target: String?,
+        reject: () -> Unit = {},
+    ) =
         request.run {
-            if (state.cards.firstOrNull()?.id != movie.id) return@run
+            val remaining =
+                if (target != null) FilmPageDto(cards.filterNot { it.id == id }, cursor) else null
             try {
-                libraryRepository.decide(movie, folder)
-            } catch (failure: Exception) {
-                onRejected()
-                throw failure
+                repo.decide(type, id, target, remaining, repo.deckPath(deck))
+            } catch (e: Exception) {
+                reject()
+                throw e
             }
-            val remainingCards = state.cards.drop(1)
-            val nextCards =
-                if (folder == "WILL_WATCH" && remainingCards.size > 1) {
-                    listOf(remainingCards.last()) + remainingCards.dropLast(1)
-                } else remainingCards
-            state =
-                state.copy(
-                    cards = nextCards,
-                    loaded = true,
-                    saved = state.saved + if (folder == "WILL_WATCH") 1 else 0,
-                    skipped = state.skipped + if (folder == "WONT_WATCH") 1 else 0,
-                )
-            fill()
+            cards = cards.filterNot { it.id == id }
+            sessionDecisions =
+                if (target == null) (sessionDecisions - 1).coerceAtLeast(0)
+                else sessionDecisions + 1
+            undo = if (target == null) null else id
+            request.continueWith {
+                if (target == null) refresh(type, deck)
+                else {
+                    catalog = repo.catalog(type)
+                    if (cards.isEmpty() && cursor != null) page(type, deck, cursor)
+                }
+            }
         }
 }

@@ -12,6 +12,8 @@ data class AppTypography(
     val body: TextStyle,
     val caption: TextStyle,
     val button: TextStyle,
+    val accountTitle: TextStyle,
+    val streak: TextStyle,
     val navigation: TextStyle,
     val synopsis: TextStyle,
 )
@@ -53,11 +55,24 @@ fun appTypography(fontFamily: FontFamily = FontFamily.Default) =
                 fontSize = 15.sp,
                 lineHeight = 21.sp,
             ),
+        accountTitle =
+            TextStyle(
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 26.sp,
+                lineHeight = 32.sp,
+            ),
+        streak =
+            TextStyle(
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                lineHeight = 24.sp,
+            ),
         button =
             TextStyle(
                 fontFamily = fontFamily,
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
             ),
     )

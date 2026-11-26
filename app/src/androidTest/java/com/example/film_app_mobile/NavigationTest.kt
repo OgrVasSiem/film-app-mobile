@@ -9,11 +9,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.core.view.WindowCompat
 import com.example.film_app_mobile.core.designsystem.theme.AppTheme
-import com.example.film_app_mobile.feature.deck.DeckCarousel
-import com.example.film_app_mobile.feature.library.LibraryScreen
-import com.example.film_app_mobile.feature.library.LibraryState
+import com.example.film_app_mobile.feature.deck.components.DeckCarousel
+import com.example.film_app_mobile.feature.library.components.LibraryPreview
+import com.example.film_app_mobile.feature.library.state.LibraryState
 import com.example.film_app_mobile.navigation.MovieApp
 import com.example.film_app_mobile.ui.model.Film
 import org.junit.Rule
@@ -25,52 +24,51 @@ class NavigationTest {
     @Test
     fun backFromLibraryReturnsToPacks() {
         val activity = compose.activity
-        compose.runOnUiThread {
-            activity.setContent {
-                AppTheme { MovieApp(signedIn = true, dark = false, changeTheme = {}) }
-            }
-        }
+        compose.runOnUiThread { activity.setContent { AppTheme { MovieApp(signedIn = true) } } }
+        compose.onNodeWithText(activity.getString(R.string.series_v2)).performClick()
         compose.onNodeWithText(activity.getString(R.string.library_title)).performClick()
-        compose.onNodeWithText(activity.getString(R.string.watched)).assertExists()
-        compose.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
-        compose.onNodeWithText(activity.getString(R.string.packs_title)).assertIsDisplayed()
-    }
-
-    @Test
-    fun themeSwitchChangesIconsAndPersistsChoice() {
-        val activity = compose.activity
-        val prefs =
-            activity.getSharedPreferences("appearance", android.content.Context.MODE_PRIVATE)
-        val original = prefs.all["dark"] as? Boolean
-        try {
-            prefs.edit().putBoolean("dark", false).commit()
-            compose.runOnUiThread { activity.setContent { activity.AppContent(true) } }
-            compose.onNodeWithText(activity.getString(R.string.profile_title)).performClick()
-            val toggle = compose.onNodeWithText(activity.getString(R.string.dark_theme))
-            toggle.assertIsOff().performClick()
-            toggle.assertIsOn()
-            compose.runOnIdle {
-                org.junit.Assert.assertTrue(prefs.getBoolean("dark", false))
-                org.junit.Assert.assertFalse(
-                    WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-                        .isAppearanceLightStatusBars
-                )
-            }
-            assertSystemBars(dark = true)
-            toggle.performClick()
-            toggle.assertIsOff()
-            compose.runOnIdle {
-                org.junit.Assert.assertTrue(
-                    WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-                        .isAppearanceLightStatusBars
-                )
-            }
-            assertSystemBars(dark = false)
-            compose.onNodeWithText(activity.getString(R.string.logout)).assertExists()
-        } finally {
-            if (original == null) prefs.edit().remove("dark").commit()
-            else prefs.edit().putBoolean("dark", original).commit()
+        compose.onNodeWithText(activity.getString(R.string.series_v2)).assertIsSelected()
+        compose.onNodeWithText(activity.getString(R.string.films_v2)).performClick()
+        compose.waitUntil(10_000) {
+            compose
+                .onAllNodesWithText(activity.getString(R.string.watched), useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
+        val seeAll = activity.getString(R.string.see_all)
+        val tab = hasText(activity.getString(R.string.library_title)) and isSelectable()
+        for ((index, title) in
+            listOf(R.string.will_watch, R.string.watched, R.string.archive_title).withIndex()) {
+            compose.waitUntil(10_000) {
+                compose.onAllNodesWithText(seeAll).fetchSemanticsNodes().size == 2
+            }
+            if (index < 2) {
+                compose.onAllNodesWithText(seeAll)[index].performClick()
+            } else {
+                compose
+                    .onNode(
+                        hasContentDescription(
+                            activity.getString(R.string.archive_n, 0).substringBefore("0"),
+                            substring = true,
+                        ) and hasClickAction()
+                    )
+                    .performClick()
+            }
+            compose.waitUntil(10_000) {
+                compose.onAllNodesWithText(seeAll).fetchSemanticsNodes().isEmpty()
+            }
+            compose.onNodeWithText(activity.getString(title)).assertIsDisplayed()
+            compose.onNode(tab).assertIsSelected()
+            compose.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
+        }
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText(seeAll).fetchSemanticsNodes().size == 2
+        }
+        compose.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
+        compose
+            .onAllNodesWithText(activity.getString(R.string.home_title))
+            .onFirst()
+            .assertIsDisplayed()
     }
 
     @Test
@@ -92,21 +90,19 @@ class NavigationTest {
             activity.setContent {
                 AppTheme {
                     Column {
-                        LibraryScreen(
-                            LibraryState(cards = listOf(film)),
+                        LibraryPreview(
+                            LibraryState(sections = mapOf("WILL_WATCH" to listOf(film))),
                             false,
                             null,
-                            {},
-                            {},
-                            { _, _ -> },
-                            {},
                             {},
                         )
                     }
                 }
             }
         }
-        compose.onNodeWithText(film.title, useUnmergedTree = true).performTouchInput { click() }
+        compose.onNodeWithContentDescription(film.title, useUnmergedTree = true).performTouchInput {
+            click()
+        }
         compose.waitUntil(5000) {
             compose.onAllNodesWithText(film.description).fetchSemanticsNodes().isNotEmpty()
         }
@@ -142,30 +138,9 @@ class NavigationTest {
         compose.runOnIdle { org.junit.Assert.assertTrue(choices.isEmpty()) }
         carousel.performTouchInput { swipeRight() }
         carousel.performTouchInput { swipeLeft() }
+        carousel.performTouchInput { swipeDown() }
         compose.runOnIdle {
-            org.junit.Assert.assertEquals(listOf("WILL_WATCH", "WONT_WATCH"), choices)
-        }
-    }
-
-    private fun assertSystemBars(dark: Boolean) {
-        val activity = compose.activity
-        compose.runOnIdle {
-            val controller =
-                WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-            org.junit.Assert.assertEquals(!dark, controller.isAppearanceLightNavigationBars)
-        }
-        val automation =
-            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
-        val top = android.graphics.Color.parseColor(if (dark) "#191617" else "#F4EFED")
-        val bottom = android.graphics.Color.parseColor(if (dark) "#252021" else "#FBF7F4")
-        compose.waitUntil(5000) {
-            val bitmap = automation.takeScreenshot() ?: return@waitUntil false
-            try {
-                val x = bitmap.width / 3
-                bitmap.getPixel(x, 8) == top && bitmap.getPixel(x, bitmap.height - 8) == bottom
-            } finally {
-                bitmap.recycle()
-            }
+            org.junit.Assert.assertEquals(listOf("WILL_WATCH", "WONT_WATCH", "WATCHED"), choices)
         }
     }
 }

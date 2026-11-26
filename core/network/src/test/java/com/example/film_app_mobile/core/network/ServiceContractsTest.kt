@@ -22,7 +22,8 @@ class ServiceContractsTest {
             val profile = retrofit.create(ProfileApi::class.java)
             val packs = retrofit.create(PacksApi::class.java)
             val library = retrofit.create(LibraryApi::class.java)
-            val account = """{"id":1,"login":"filmfan","premium":true,"adsEnabled":false}"""
+            val account =
+                """{"id":1,"login":"filmfan","premium":true,"adsEnabled":false,"passwordProtected":false,"streakDays":2}"""
             val session = """{"token":"test","account":$account}"""
             val films =
                 """[{"id":2,"title":"Film","description":"","posterUrl":null,"year":null,"director":null,"actors":[],"durationMinutes":null,"genres":[]}]"""
@@ -34,6 +35,7 @@ class ServiceContractsTest {
             }
             fun verify(method: String, path: String, authenticated: Boolean = true) {
                 val request = server.takeRequest()
+                if (path == "auth/start") assertEquals(0L, request.bodySize)
                 assertEquals(method, request.method)
                 assertEquals(
                     "/api/v1/$path",
@@ -42,16 +44,22 @@ class ServiceContractsTest {
                 assertEquals(if (authenticated) bearer else null, request.headers["Authorization"])
             }
 
+            server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "0").build())
             respond(session, 201)
-            assertEquals(true, auth.register(credentials).account.premium)
-            verify("POST", "auth/register", false)
+            val failure = runCatching { auth.start() }.exceptionOrNull() as? retrofit2.HttpException
+            assertEquals(503, failure?.code())
+            verify("POST", "auth/start", false)
+            assertEquals(true, auth.start().account.premium)
+            verify("POST", "auth/start", false)
             respond(session)
             assertEquals("test", auth.login(credentials).token)
             verify("POST", "auth/login", false)
             respond(account)
             assertEquals(false, profile.profile(bearer).adsEnabled)
             verify("GET", "me")
-            respond("""{"packs":[{"id":3,"title":"Pack","description":"","premium":true,"locked":false}],"covers":{}}""")
+            respond(
+                """{"packs":[{"id":3,"title":"Pack","description":"","premium":true,"locked":false}],"covers":{}}"""
+            )
             assertEquals(false, packs.catalog(bearer, null).body()!!.packs.single().locked)
             verify("GET", "packs/catalog")
             respond("""{"items":$films,"nextCursor":null}""")
